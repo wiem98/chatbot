@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Interface</title>
+    <style>
+        /* Basic Reset */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Adjust body styling */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #f4f4f8;
+            overflow: hidden;
+        }
+
+        /* Chat Container */
+        #chat-container {
+            width: 100%;
+            max-width: 600px;
+            height: 90vh;  /* Uses most of the screen height */
+            display: flex;
+            flex-direction: column;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+        }
+
+        /* Chat Box */
+        #chat-box {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #f9f9fb;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            scroll-behavior: smooth;
+        }
+
+        /* Message Bubbles */
+        .message {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 15px;
+            line-height: 1.4;
+            word-wrap: break-word;
+            animation: fadeIn 0.2s ease-in;
+        }
+
+        /* User message styles */
+        .message.user {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-top-right-radius: 0;
+            text-align: right;
+        }
+
+        /* Bot message styles */
+        .message.bot {
+            background-color: #e5e5ea;
+            color: black;
+            align-self: flex-start;
+            border-top-left-radius: 0;
+        }
+
+        /* Input Section */
+        #input-section {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #ddd;
+            background-color: #fff;
+        }
+
+        /* Input Field */
+        #user-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 20px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        /* Send Button */
+        #send-button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+
+        /* Fade-in Animation */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-box"></div>
+        <div id="input-section">
+            <input type="text" id="user-input" placeholder="Tapez votre réponse ici..." autocomplete="off">
+            <button id="send-button" onclick="sendMessage()">Envoyer</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            startConversation();
+            document.getElementById("user-input").focus();
+        });
+
+        // Start the conversation when the page loads
+        async function startConversation() {
+            const chatBox = document.getElementById("chat-box");
+
+            try {
+                const response = await fetch("/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ message: "" })
+                });
+
+                const data = await response.json();
+                displayResponse(data);
+            } catch (error) {
+                console.error("Error starting conversation:", error);
+                displayResponse({ response: "Erreur lors de l'initialisation du chat." });
+            }
+        }
+
+        // Send user input to the chatbot
+        async function sendMessage() {
+            const userInput = document.getElementById("user-input").value.trim();
+            const chatBox = document.getElementById("chat-box");
+
+            if (userInput) {
+                // Display user message
+                appendMessage(userInput, "user");
+
+                try {
+                    const response = await fetch("/chat", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ message: userInput })
+                    });
+
+                    const data = await response.json();
+                    displayResponse(data);
+                } catch (error) {
+                    console.error("Error sending message:", error);
+                    displayResponse({ response: "Erreur lors de l'envoi du message." });
+                }
+
+                // Clear the input field after sending the message
+                document.getElementById("user-input").value = "";
+                chatBox.scrollTop = chatBox.scrollHeight;
+                document.getElementById("user-input").focus();
+            }
+        }
+
+        // Display chatbot's response
+        function displayResponse(data) {
+            const chatBox = document.getElementById("chat-box");
+
+            // Display bot response
+            const botResponse = data.response || "Erreur dans la réponse.";
+            appendMessage(botResponse, "bot");
+
+            // Check if there's a PDF in the response and add a download link
+            if (data.pdf_data) {
+                const pdfBlob = base64ToBlob(data.pdf_data, 'application/pdf');
+                const pdfUrl = URL.createObjectURL(pdfBlob);
+
+                const pdfLinkDiv = document.createElement("div");
+                pdfLinkDiv.className = "message bot";
+                const pdfLink = document.createElement("a");
+                pdfLink.href = pdfUrl;
+                pdfLink.download = data.pdf_filename || "devis.pdf";
+                pdfLink.textContent = "Télécharger le devis";
+                pdfLink.target = "_blank"; // Opens in a new tab
+
+                pdfLinkDiv.appendChild(pdfLink);
+                chatBox.appendChild(pdfLinkDiv);
+            }
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Function to append messages to the chat box
+        function appendMessage(message, sender) {
+            const chatBox = document.getElementById("chat-box");
+            const messageDiv = document.createElement("div");
+            messageDiv.className = `message ${sender}`;
+            messageDiv.textContent = message;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        // Helper function to convert Base64 to Blob
+        function base64ToBlob(base64, mimeType) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = Array.from(byteCharacters, char => char.charCodeAt(0));
+            const byteArray = new Uint8Array(byteNumbers);
+            return new Blob([byteArray], { type: mimeType });
+        }
+    </script>
+</body>
+</html>
