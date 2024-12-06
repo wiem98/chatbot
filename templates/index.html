@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chatbot Interface</title>
+    <title>Enhanced Chatbot Interface</title>
     <style>
         /* Basic Reset */
         * {
@@ -21,19 +21,30 @@
             height: 100vh;
             background-color: #f4f4f8;
             overflow: hidden;
+            transition: background-color 0.3s;
+        }
+
+        /* Dark Mode Styling */
+        body.dark-mode {
+            background-color: #181818;
+            color: #f4f4f8;
         }
 
         /* Chat Container */
         #chat-container {
             width: 100%;
             max-width: 600px;
-            height: 90vh;  /* Uses most of the screen height */
+            height: 90vh;
             display: flex;
             flex-direction: column;
             background-color: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             overflow: hidden;
+        }
+
+        body.dark-mode #chat-container {
+            background-color: #252525;
         }
 
         /* Chat Box */
@@ -46,6 +57,10 @@
             flex-direction: column;
             gap: 10px;
             scroll-behavior: smooth;
+        }
+
+        body.dark-mode #chat-box {
+            background-color: #2a2a2a;
         }
 
         /* Message Bubbles */
@@ -75,12 +90,22 @@
             border-top-left-radius: 0;
         }
 
+        body.dark-mode .message.bot {
+            background-color: #444;
+            color: #f4f4f8;
+        }
+
         /* Input Section */
         #input-section {
             display: flex;
             padding: 15px;
             border-top: 1px solid #ddd;
             background-color: #fff;
+        }
+
+        body.dark-mode #input-section {
+            background-color: #2a2a2a;
+            border-color: #444;
         }
 
         /* Input Field */
@@ -91,6 +116,12 @@
             border-radius: 20px;
             font-size: 14px;
             outline: none;
+        }
+
+        body.dark-mode #user-input {
+            background-color: #444;
+            color: white;
+            border-color: #666;
         }
 
         /* Send Button */
@@ -110,19 +141,62 @@
             background-color: #0056b3;
         }
 
-        /* Fade-in Animation */
+        /* Dark Mode Button */
+        #theme-toggle {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        body.dark-mode #theme-toggle {
+            background-color: #0056b3;
+        }
+
+        /* Typing Indicator */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            margin-left: 10px;
+            animation: fadeIn 0.5s ease-in-out infinite;
+        }
+
+        .typing-indicator span {
+            width: 8px;
+            height: 8px;
+            margin: 0 3px;
+            background-color: #ccc;
+            border-radius: 50%;
+            animation: blink 1.4s infinite;
+        }
+
+        .typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
     </style>
 </head>
 <body>
+    <button id="theme-toggle" onclick="toggleTheme()">🌙</button>
     <div id="chat-container">
         <div id="chat-box"></div>
         <div id="input-section">
-            <input type="text" id="user-input" placeholder="Tapez votre réponse ici..." autocomplete="off">
-            <button id="send-button" onclick="sendMessage()">Envoyer</button>
+            <textarea id="user-input" placeholder="Type your message..." rows="4"></textarea>
+            <button id="send-button" onclick="sendMessage()">Send</button>
         </div>
     </div>
 
@@ -132,10 +206,28 @@
             document.getElementById("user-input").focus();
         });
 
-        // Start the conversation when the page loads
-        async function startConversation() {
-            const chatBox = document.getElementById("chat-box");
+        // Toggle Dark Mode
+        function toggleTheme() {
+            document.body.classList.toggle("dark-mode");
+        }
 
+        // Typing Indicator
+        function showTypingIndicator() {
+            const chatBox = document.getElementById("chat-box");
+            const typingIndicator = document.createElement("div");
+            typingIndicator.className = "message bot typing-indicator";
+            typingIndicator.innerHTML = "<span></span><span></span><span></span>";
+            chatBox.appendChild(typingIndicator);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.querySelector(".typing-indicator");
+            if (indicator) indicator.remove();
+        }
+
+        async function startConversation() {
+            showTypingIndicator();
             try {
                 const response = await fetch("/chat", {
                     method: "POST",
@@ -146,21 +238,22 @@
                 });
 
                 const data = await response.json();
+                hideTypingIndicator();
                 displayResponse(data);
             } catch (error) {
                 console.error("Error starting conversation:", error);
-                displayResponse({ response: "Erreur lors de l'initialisation du chat." });
+                displayResponse({ response: "Error initializing chat." });
+                hideTypingIndicator();
             }
         }
 
-        // Send user input to the chatbot
         async function sendMessage() {
             const userInput = document.getElementById("user-input").value.trim();
             const chatBox = document.getElementById("chat-box");
 
             if (userInput) {
-                // Display user message
                 appendMessage(userInput, "user");
+                showTypingIndicator();
 
                 try {
                     const response = await fetch("/chat", {
@@ -172,28 +265,23 @@
                     });
 
                     const data = await response.json();
+                    hideTypingIndicator();
                     displayResponse(data);
                 } catch (error) {
                     console.error("Error sending message:", error);
-                    displayResponse({ response: "Erreur lors de l'envoi du message." });
+                    displayResponse({ response: "Error sending message." });
+                    hideTypingIndicator();
                 }
 
-                // Clear the input field after sending the message
                 document.getElementById("user-input").value = "";
-                chatBox.scrollTop = chatBox.scrollHeight;
-                document.getElementById("user-input").focus();
             }
         }
 
-        // Display chatbot's response
         function displayResponse(data) {
             const chatBox = document.getElementById("chat-box");
-
-            // Display bot response
-            const botResponse = data.response || "Erreur dans la réponse.";
+            const botResponse = data.response || "Error in response.";
             appendMessage(botResponse, "bot");
 
-            // Check if there's a PDF in the response and add a download link
             if (data.pdf_data) {
                 const pdfBlob = base64ToBlob(data.pdf_data, 'application/pdf');
                 const pdfUrl = URL.createObjectURL(pdfBlob);
@@ -202,9 +290,9 @@
                 pdfLinkDiv.className = "message bot";
                 const pdfLink = document.createElement("a");
                 pdfLink.href = pdfUrl;
-                pdfLink.download = data.pdf_filename || "devis.pdf";
-                pdfLink.textContent = "Télécharger le devis";
-                pdfLink.target = "_blank"; // Opens in a new tab
+                pdfLink.download = data.pdf_filename || "document.pdf";
+                pdfLink.textContent = "Download File";
+                pdfLink.target = "_blank";
 
                 pdfLinkDiv.appendChild(pdfLink);
                 chatBox.appendChild(pdfLinkDiv);
@@ -213,7 +301,6 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // Function to append messages to the chat box
         function appendMessage(message, sender) {
             const chatBox = document.getElementById("chat-box");
             const messageDiv = document.createElement("div");
@@ -223,7 +310,6 @@
             chatBox.scrollTop = chatBox.scrollHeight;
         }
 
-        // Helper function to convert Base64 to Blob
         function base64ToBlob(base64, mimeType) {
             const byteCharacters = atob(base64);
             const byteNumbers = Array.from(byteCharacters, char => char.charCodeAt(0));

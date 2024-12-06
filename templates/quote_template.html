@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Demande de Devis</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+        header, footer {
+            text-align: center;
+            padding: 10px 0;
+            background-color: #f0f0f0;
+        }
+        .company-details {
+            font-size: 12px;
+            text-align: right;
+            margin-right: 20px;
+        }
+        .quote-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+        table {
+            width: 90%;
+            margin: 20px auto;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        .total {
+            font-weight: bold;
+        }
+        .legal-note {
+            font-size: 10px;
+            text-align: left;
+            margin: 20px;
+        }
+    </style>
+</head>
+<body>
+    <header style="display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 2px solid #ddd;">
+        <!-- Logo et informations de votre société -->
+        <div style="text-align: left;">
+            <img src="file:///C:\Users\LENOVO\new\image\spm_logo.jpg" alt="Logo Martial Petrochimie" style="height: 80px; margin-bottom: 10px;">
+            <p style="margin: 0; font-size: 12px; line-height: 1.5;">
+                13 avenue Lascos, 13500 Martigues<br>
+                N° TVA : FR75808988086<br>
+                SIRET : 8809868600012<br>
+                Tel : 04 13 93 00 75<br>
+                Capital : 10 000 EUR
+            </p>
+        </div>
+        <!-- Informations de l'entreprise cliente -->
+        <div style="text-align: right; font-size: 12px; line-height: 1.5;">
+            <p style="margin: 0;">
+                <strong>{{ client_name }}</strong><br>
+                {{ client_address }}<br>
+                N° TVA : {{ client_tva }}<br>
+            </p>
+        </div>
+    </header>
+    
+    <div class="quote-title">Demande de Devis</div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>REF</th>
+                <th>Description</th>
+                <th>Quantité</th>
+                <th>Prix unitaire Brut</th>
+                <th>N° Coulée</th>
+                <th>Prix unitaire</th>
+                <th>Total HT</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td>{{ item.reference }}</td>
+                <td>{{ item.produit }}</td>
+                <td>{{ item.quantite }}</td>
+                <td>{{ item.prix_brut }}</td>
+                <td>{{ item.coulee }}</td>
+                <td>{{ item.prix_unitaire }}</td>
+                <td>{{ item.total }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <table>
+        <tr>
+            <td class="total">Base HT</td>
+            <td>{{ base_ht }}</td>
+        </tr>
+        <tr>
+            <td class="total">Montant TVA</td>
+            <td>{{ montant_taxes }}</td>
+        </tr>
+        <tr>
+            <td class="total">Net à payer TTC</td>
+            <td>{{ net_a_payer }}</td>
+        </tr>
+    </table>
+    
+
+    <div class="legal-note">
+        Il est convenu que le vendeur reste propriétaire des marchandises vendues tant que l'acquéreur ne lui a pas entièrement réglé le prix prévu dans le présent contrat. 
+        En cas de non-paiement, le vendeur pourra exiger la restitution des marchandises.
+    </div>
+
+    <footer>
+        <p>Merci pour votre confiance</p>
+    </footer>
+</body>
+</html>
