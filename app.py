@@ -270,8 +270,8 @@ def chat():
 
         elif step == 5:
             try:
-                # Split user input into product entries (handle multiple products in one line)
-                product_entries = re.findall(r'(\d+\s+\S+)', user_input)
+                # Split user input into product entries (one line per product entry)
+                product_entries = user_input.splitlines()
                 logging.info(f"Parsed product entries: {product_entries}")
 
                 if not product_entries:
@@ -280,7 +280,6 @@ def chat():
                     session['step'] = 5
                     return jsonify({"response": response})
 
-                # Process each product entry
                 for entry in product_entries:
                     match = re.match(r'^(\d+)\s+(.+)$', entry)
                     if not match:
@@ -296,13 +295,13 @@ def chat():
                         response = f"Quantité invalide pour le produit '{product_ref_or_name}'. Veuillez entrer un nombre entier valide."
                         return jsonify({"response": response})
 
-                    # Query the database for the product
+                    # Query the database for matching products
                     logging.info(f"Querying product: {product_ref_or_name}")
                     cursor.execute('''
                         SELECT ref, designation, prix_achat, stock
                         FROM new_product
                         WHERE ref ILIKE %s OR designation ILIKE %s
-                    ''', (product_ref_or_name, product_ref_or_name))
+                    ''', (f"%{product_ref_or_name}%", f"%{product_ref_or_name}%"))
                     products = cursor.fetchall()
                     logging.info(f"Product query result: {products}")
 
@@ -310,44 +309,40 @@ def chat():
                         response = f"Le produit '{product_ref_or_name}' est introuvable. Veuillez vérifier la référence ou le nom."
                         return jsonify({"response": response})
 
-                    # Handle multiple matches
                     if len(products) > 1:
-                        references = [product[0] for product in products]
-                        session['data']['pending_choice'] = {
-                            'quantity': quantity,
-                            'designation': product_ref_or_name,
-                            'references': references
+                        # Handle multiple matches for the product
+                        product_options = [{"ref": p[0], "designation": p[1], "prix_achat": float(p[2]), "stock": p[3]} for p in products]
+                        session['data']['pending_choices'] = {
+                            "product_ref_or_name": product_ref_or_name,
+                            "quantity": quantity,
+                            "options": product_options
                         }
-                        response = (f"Le produit '{product_ref_or_name}' correspond à plusieurs références : "
-                                    f"{', '.join(references)}. Veuillez choisir une référence.")
+                        options_text = ", ".join([f"{opt['ref']} ({opt['designation']})" for opt in product_options])
+                        response = (f"Le produit '{product_ref_or_name}' correspond à plusieurs références : {options_text}. "
+                                    f"Veuillez choisir une référence en saisissant le code exact.")
+                        session['step'] = 6  # Move to step 6 for user choice
                         return jsonify({"response": response})
 
                     # Single product match
                     product = products[0]
-                    product_reference = product[0]
-                    product_name = product[1]
-                    product_price = float(product[2])
-                    stock = product[3]
-
-                    logging.info(f"Analyzing price for product: {product_reference}")
+                    product_reference, product_name, product_price, stock = product
                     predicted_price = analyze_and_set_price(
-                        prix_achat=product_price,
+                        prix_achat=float(product_price),
                         prix_ventes=None,
                         company_name=session['data']['nom_entreprise'],
                         ref_produit=product_reference
                     )
-
                     total_produit = round(predicted_price * quantity, 2)
                     session['data']['products'].append({
-                        'reference': product_reference,
-                        'produit': product_name,
-                        'quantite': quantity,
-                        'total_produit': total_produit
+                        "reference": product_reference,
+                        "produit": product_name,
+                        "quantite": quantity,
+                        "total_produit": total_produit
                     })
                     logging.info(f"Added product to session: {session['data']['products'][-1]}")
 
                 response = "Tous les produits ont été ajoutés. Souhaitez-vous en ajouter d'autres ? (oui/non)"
-                session['step'] = 7
+                session['step'] = 7  # Move to confirmation step
                 return jsonify({"response": response})
 
             except Exception as e:
