@@ -12,6 +12,7 @@ import logging
 from sklearn.impute import SimpleImputer
 import base64
 import shap
+from datetime import datetime
 
 
 app = Flask(__name__)
@@ -31,6 +32,7 @@ try:
     cursor = conn.cursor()
 except Exception as e:
     raise RuntimeError(f"Database connection failed: {e}")
+
 
 # Ensure columns are added if they do not already exist
 cursor.execute('''
@@ -387,11 +389,13 @@ def chat():
 
                         # Insert order details into the database
                         for product in session['data']['products']:
+                            current_date = datetime.now().strftime('%Y-%m-%d')  # Format date for SQL
+
                             cursor.execute('''
                                 INSERT INTO informations (
                                     nom_entreprise, adresse_entreprise, n_tva, nom_user, ref_produit, produit, quantite, 
-                                    total_produit, total_commande, montant_taxes, net_a_payer
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                                    total_produit, total_commande, montant_taxes, net_a_payer, date
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             ''', (
                                 session['data']['nom_entreprise'],
                                 session['data']['adresse_entreprise'],
@@ -404,9 +408,13 @@ def chat():
                                 session['data']['base_ht'],
                                 session['data']['montant_taxes'],
                                 session['data']['net_a_payer'],
+                                current_date,
+
                             ))
                         conn.commit()
-
+                        logging.info(f"Insert data: {session['data']}")
+                        logging.info(f"Product: {product}")
+                        logging.info(f"Current Date: {current_date}")
                         # Generate PDF
                         pdf_data = generate_quote_base64(session['data']['nom_entreprise'], items)
                         logging.info(f"Base HT: {session['data'].get('base_ht', 0)}, Montant TVA: {session['data'].get('montant_taxes', 0)}, Net à Payer: {session['data'].get('net_a_payer', 0)}")
@@ -460,7 +468,8 @@ def generate_quote_base64(client_name, items, output_file="quote.pdf"):
     # Load the HTML template
     env = Environment(loader=FileSystemLoader("templates"))
     template = env.get_template("quote_template.html")
-    
+    current_date = datetime.now().strftime('%d/%m/%Y')
+
     # Render the template with data
     html_content = template.render(
     client_name=session['data']['nom_entreprise'],
@@ -469,7 +478,8 @@ def generate_quote_base64(client_name, items, output_file="quote.pdf"):
     items=items,
     base_ht=session['data'].get('base_ht', 0),
     montant_taxes=session['data'].get('montant_taxes', 0),
-    net_a_payer=session['data'].get('net_a_payer', 0)
+    net_a_payer=session['data'].get('net_a_payer', 0),
+    date=current_date
     )
 
     # Generate PDF using pdfkit
