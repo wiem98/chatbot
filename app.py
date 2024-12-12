@@ -1,4 +1,6 @@
-from flask import Flask, request, jsonify, render_template, session
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, flash
+from flask_session import Session
+import json
 import psycopg2
 import re
 from jinja2 import Environment, FileSystemLoader
@@ -13,13 +15,16 @@ from sklearn.impute import SimpleImputer
 import base64
 import shap
 from datetime import datetime
-
+import chardet
 
 app = Flask(__name__)
 app.secret_key = 'wiem3551'
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = False  # Optional, makes session non-permanent
+Session(app)  # Initialize the session extension
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 try:
     conn = psycopg2.connect(
@@ -32,7 +37,6 @@ try:
     cursor = conn.cursor()
 except Exception as e:
     raise RuntimeError(f"Database connection failed: {e}")
-
 
 # Ensure columns are added if they do not already exist
 cursor.execute('''
@@ -59,16 +63,22 @@ MODEL_PATH = r'C:\Users\LENOVO\new\models\gradient_boosting_model.pkl'
 loaded_model = joblib.load(MODEL_PATH)
 print(loaded_model.feature_names_in_)
 
-
 @app.after_request
 def add_headers(response):
     response.headers['Cache-Control'] = 'no-store'
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     return response
+
 @app.route('/')
 def home():
+    """
+    Clear the session and render the home page.
+    """
+    session.clear()  # Clear the session to restart the flow
+    logging.info("Session cleared: Restarting steps.")
     return render_template('index.html')
+
 
 @app.route('/predict_price', methods=['POST'])
 def predict_price():
@@ -88,7 +98,7 @@ def predict_price():
         return jsonify({"predicted_price": round(predicted_price, 2)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-    
+
 def analyze_and_set_price(prix_achat, prix_ventes, company_name, ref_produit):
     try:
         # Query stock
@@ -170,31 +180,183 @@ def analyze_and_set_price(prix_achat, prix_ventes, company_name, ref_produit):
         conn.rollback()
         logging.error(f"Error in analyze_and_set_price: {e}")
         return round(float(prix_achat) * 1.25, 2)  # Fallback calculation
-    
-@app.route('/analyze_price', methods=['POST'])
-def analyze_price():
-    data = request.json
-    prix_achat = data.get('prix_achat')
-    ref_produit = data.get('ref_produit')
-    company_name = data.get('company_name', "DefaultCompany")  # Optional company name
+def detect_columns(df):
+    """
+    Detects the most likely columns for 'reference' and 'quantity' in a DataFrame.
 
-    if not prix_achat or not ref_produit:
-        return jsonify({"error": "Missing required parameters: prix_achat or ref_produit"}), 400
+    Args:
+        df (pd.DataFrame): DataFrame loaded from the uploaded file.
 
+    Returns:
+        tuple: Detected reference column name and quantity column name.
+    """
     try:
-        predicted_price, shap_explanation, shap_plot_path = analyze_and_set_price(
-            prix_achat=float(prix_achat),
-            prix_ventes=None,
-            company_name=company_name,
-            ref_produit=ref_produit
-        )
-        return jsonify({
-            "predicted_price": predicted_price,
-            "shap_explanation": shap_explanation,
-            "shap_plot_path": shap_plot_path  # Include the path to the saved SHAP plot, if applicable
-        })
+        ref_candidates = []
+        qty_candidates = []
+
+        for col in df.columns:
+            # Check for potential "reference" column (alphanumeric content)
+            if df[col].apply(lambda x: isinstance(x, str) or isinstance(x, int)).all():
+                alnum_ratio = df[col].apply(lambda x: bool(re.match(r'^[A-Za-z0-9-/ ]+$', str(x)))).mean()
+                if alnum_ratio > 0.5:  # Adjust threshold as needed
+                    ref_candidates.append((col, alnum_ratio))
+
+            # Check for potential "quantity" column (numeric content)
+            if pd.api.types.is_numeric_dtype(df[col]) or df[col].apply(lambda x: str(x).isdigit()).mean() > 0.5:
+                numeric_ratio = df[col].apply(lambda x: isinstance(x, (int, float)) or str(x).isdigit()).mean()
+                if numeric_ratio > 0.5:  # Adjust threshold as needed
+                    qty_candidates.append((col, numeric_ratio))
+
+        ref_candidates.sort(key=lambda x: x[1], reverse=True)
+        qty_candidates.sort(key=lambda x: x[1], reverse=True)
+
+        ref_col = ref_candidates[0][0] if ref_candidates else None
+        qty_col = qty_candidates[0][0] if qty_candidates else None
+
+        if not ref_col or not qty_col:
+            raise ValueError("Unable to detect reference or quantity columns automatically.")
+
+        return ref_col, qty_col
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        logging.error(f"Error detecting columns: {e}")
+        raise RuntimeError(f"Error detecting columns: {e}")
+
+def process_uploaded_file(file):
+    """
+    Processes an uploaded file to detect columns and extract relevant data.
+
+    Args:
+        file: Uploaded file object.
+
+    Returns:
+        pd.DataFrame: DataFrame with detected 'reference' and 'quantity' columns.
+    """
+    try:
+        file.seek(0)  # Ensure file pointer is at the beginning
+        raw_data = file.read()
+        detected = chardet.detect(raw_data)
+        encoding = detected['encoding']
+        file.seek(0)  # Reset pointer again
+
+        # Load file into a DataFrame
+        try:
+            # Try reading with headers
+            df = pd.read_csv(file, encoding=encoding, sep=None, engine='python')
+        except pd.errors.ParserError:
+            # Fallback to reading without headers
+            logging.warning("No headers detected, reading file without headers.")
+            file.seek(0)
+            df = pd.read_csv(file, encoding=encoding, sep=None, engine='python', header=None)
+
+        logging.info(f"Raw data from file:\n{df.head()}")
+
+        # Detect reference and quantity columns
+        ref_col, qty_col = detect_columns(df)
+
+        # Rename columns for consistency
+        df = df[[ref_col, qty_col]].rename(columns={ref_col: "reference", qty_col: "quantity"})
+        logging.info(f"Detected reference column: {ref_col}, quantity column: {qty_col}")
+
+        return df
+
+    except Exception as e:
+        raise RuntimeError(f"Error processing uploaded file: {e}")
+
+def parse_file(file):
+    """
+    Parses the uploaded file and retrieves relevant product details.
+
+    Args:
+        file: The uploaded file object.
+
+    Returns:
+        list: A list of dictionaries representing products with their calculated prices.
+    """
+    try:
+        logging.info("Starting file analysis...")
+        file.seek(0)  # Reset file pointer
+        raw_data = file.read()
+        detected = chardet.detect(raw_data)
+        encoding = detected['encoding']
+        logging.info(f"Detected file encoding: {encoding}")
+
+        file.seek(0)  # Reset file pointer again
+
+        # Dynamically detect delimiter and handle missing headers
+        try:
+            df = pd.read_csv(file, encoding=encoding, sep=None, engine='python', header=None)  # No headers
+            logging.info(f"File loaded without headers:\n{df.head()}")
+            # Assign default column names
+            df.columns = ['reference', 'description', 'quantite']
+        except Exception as e:
+            logging.error("Failed to read file. Please check the format.")
+            raise RuntimeError("Erreur lors de la lecture du fichier.") from e
+
+        if df.empty:
+            logging.error("Uploaded file is empty.")
+            raise ValueError("Le fichier est vide.")
+
+        # Log the loaded data
+        logging.info(f"Raw data from file:\n{df}")
+
+        parsed_products = []
+        for _, row in df.iterrows():
+            # Ensure row content is valid
+            product_ref = row['reference'].strip()
+            description = row['description']
+            try:
+                quantity = int(row['quantite'])
+            except ValueError:
+                logging.error(f"Invalid quantity value in row: {row}")
+                raise ValueError("Quantité invalide détectée.")
+
+            if not product_ref:
+                logging.error("Missing product reference in a row.")
+                raise ValueError("Chaque ligne doit contenir une 'reference'.")
+
+            logging.info(f"Processing product reference: {product_ref}, quantity: {quantity}")
+
+            # Fetch product details from the database
+            cursor.execute('''
+                SELECT ref, designation, prix_achat, stock
+                FROM new_product
+                WHERE ref ILIKE %s
+            ''', (f"%{product_ref}%",))
+            product = cursor.fetchone()
+
+            if not product:
+                logging.error(f"Product not found in database for reference: {product_ref}")
+                raise ValueError(f"Le produit '{product_ref}' est introuvable dans la base de données.")
+
+            product_reference, product_designation, product_price, stock = product
+            logging.info(f"Database product details - ref: {product_reference}, "
+                         f"designation: {product_designation}, prix_achat: {product_price}, stock: {stock}")
+
+            # Predict price and calculate total
+            predicted_price = analyze_and_set_price(
+                prix_achat=float(product_price),
+                prix_ventes=None,
+                company_name=session['data'].get('nom_entreprise', ''),
+                ref_produit=product_reference
+            )
+            total_price = round(predicted_price * quantity, 2)
+
+            product_data = {
+                "reference": product_reference,
+                "produit": product_designation,
+                "quantite": quantity,
+                "total_produit": total_price
+            }
+            parsed_products.append(product_data)
+            logging.info(f"Processed product data: {product_data}")
+
+        logging.info("File analysis completed successfully.")
+        return parsed_products
+
+    except Exception as e:
+        logging.error(f"Error during file processing: {e}", exc_info=True)
+        raise RuntimeError(f"Erreur lors du traitement du fichier : {e}")
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -207,127 +369,152 @@ def chat():
             session['data'] = {'products': [], 'is_partner': False}
         logging.info(f"Session setup completed in {time.time() - start_time:.2f}s")
 
-        # Step 2: Get user input
+        # Step 2: Get user input or file
         step = session['step']
-        data = request.json
+        data = request.json if request.is_json else None
         user_input = data.get('message', "").strip() if data else ""
-        if not user_input:
-            response = "Bonjour et bienvenue ! Pourriez-vous, s'il vous plaît, me fournir le nom de votre entreprise ?"
-            session['step'] = 1
-            logging.info(f"No user input, sending welcome message in {time.time() - start_time:.2f}s")
-            return jsonify({"response": response})
+        uploaded_file = request.files.get('file') if 'file' in request.files else None
 
-        logging.info(f"Processing step {step}. User input: {user_input}")
+        logging.info(f"Processing step {step}. User input: {user_input}, File uploaded: {bool(uploaded_file)}")
 
         # Step 3: Process based on the current step
         if step == 0:
             response = "Bonjour et bienvenue ! Pourriez-vous, s'il vous plaît, me fournir le nom de votre entreprise ?"
             session['step'] = 1
-            logging.info(f"Step 0 completed in {time.time() - start_time:.2f}s")
             return jsonify({"response": response})
 
         elif step == 1:
             session['data']['nom_entreprise'] = user_input
-
-            # Check if the company is a partner
-            query_start = time.time()
             cursor.execute("SELECT 1 FROM partenaire WHERE nom = %s", (user_input,))
-            if cursor.fetchone():
-                session['data']['is_partner'] = True
-            logging.info(f"Partner query executed in {time.time() - query_start:.2f}s")
-
+            session['data']['is_partner'] = bool(cursor.fetchone())
             response = "Merci beaucoup. Pourriez-vous également indiquer l'adresse complète de votre entreprise ?"
             session['step'] = 2
-            logging.info(f"Step 1 completed in {time.time() - start_time:.2f}s")
             return jsonify({"response": response})
 
         elif step == 2:
             session['data']['adresse_entreprise'] = user_input
             response = "Merci. Pourriez-vous me communiquer le numéro de TVA de votre entreprise ?"
             session['step'] = 3
-            logging.info(f"Step 2 completed in {time.time() - start_time:.2f}s")
             return jsonify({"response": response})
 
         elif step == 3:
             if not re.match(r"^FR\d{11}$", user_input):
-                response = ("Le numéro de TVA fourni est invalide. "
-                            "Le numéro de TVA pour la France doit commencer par 'FR' suivi de 11 chiffres. "
-                            "Veuillez réessayer.")
-                logging.info(f"Invalid TVA input in {time.time() - start_time:.2f}s")
-                return jsonify({"response": response})
-
+                return jsonify({"response": "Numéro de TVA invalide. Recommencez avec 'FR' suivi de 11 chiffres."})
             session['data']['n_tva'] = user_input
             response = "Merci beaucoup. Puis-je également connaître votre nom complet pour nos enregistrements ?"
             session['step'] = 4
-            logging.info(f"Step 3 completed in {time.time() - start_time:.2f}s")
             return jsonify({"response": response})
 
         elif step == 4:
             session['data']['nom_user'] = user_input
-            response = ("Merci. Pourriez-vous, s'il vous plaît, spécifier les produits que vous souhaitez acquérir ? "
-                        "Indiquez les quantités et les références ou noms des produits (par exemple : '5 TUY6169 2 Aluminium').")
+            response = ("Merci. Voulez-vous télécharger un fichier contenant les produits ou les entrer manuellement ? "
+                        "Répondez par 'fichier' ou 'manuel'.")
             session['step'] = 5
-            logging.info(f"Step 4 completed in {time.time() - start_time:.2f}s")
             return jsonify({"response": response})
 
         elif step == 5:
+            if uploaded_file:  # Handle file upload
+                try:
+                    parsed_data = parse_file(uploaded_file)
+                    session['data']['products'].extend(parsed_data)
+
+                    # Process totals and generate PDF
+                    items = session['data']['products']
+                    base_ht = sum(item['total_produit'] for item in items)
+                    montant_taxes = round(base_ht * 0.2, 2)  # Assuming 20% VAT
+                    net_a_payer = round(base_ht + montant_taxes, 2)
+
+                    session['data']['base_ht'] = base_ht
+                    session['data']['montant_taxes'] = montant_taxes
+                    session['data']['net_a_payer'] = net_a_payer
+                    logging.info(f"Generating PDF for session data: {session['data']}")
+
+                    pdf_data = generate_quote_base64(session['data']['nom_entreprise'], items)
+
+                    response = (f"Le fichier a été traité avec succès. Le montant total de la commande s'élève à "
+                                f"{base_ht} EUR, avec des taxes de {montant_taxes} EUR. Votre devis est prêt.")
+                    session.clear()  # Clear the session after processing
+                    return jsonify({
+                        "response": response,
+                        "pdf_data": pdf_data,
+                        "pdf_filename": "devis_rempli.pdf"
+                    })
+                    
+                except RuntimeError as e:
+                    return jsonify({"response": f"Erreur de fichier : {e}"}), 400
+
+            elif user_input.lower() == "manuel":  # Switch to manual entry
+                response = "Indiquez les quantités et les références ou noms des produits (par exemple : '5 TUY6169 2 Aluminium')."
+                session['step'] = 6
+                logging.info(f"Session products: {session['data']['products']}")
+                return jsonify({"response": response})
+
+            else:
+                response = "Réponse non reconnue. Veuillez répondre par 'fichier' ou 'manuel'."
+                return jsonify({"response": response})
+
+        elif step == 6:  # Manual entry of products
             try:
-                # Split user input into product entries (one line per product entry)
-                product_entries = user_input.splitlines()
-                logging.info(f"Parsed product entries: {product_entries}")
+                if user_input.lower() == "non":
+                    # Check if any products were added
+                    if not session['data']['products']:
+                        logging.error("No products found in session data.")
+                        return jsonify({"response": "Aucun produit ajouté. Veuillez ajouter des produits avant de continuer."})
 
-                if not product_entries:
-                    response = ("Format invalide. Veuillez saisir les produits sous le format "
-                                "'quantité référence/nom', un ou plusieurs par ligne (par exemple : '1 ECROU INOX 1/2 1 RAUN-1-2-1/2').")
-                    session['step'] = 5
-                    return jsonify({"response": response})
+                    # Calculate totals
+                    items = session['data']['products']
+                    base_ht = sum(item['total_produit'] for item in items)
+                    montant_taxes = round(base_ht * 0.2, 2)  # Assuming 20% VAT
+                    net_a_payer = round(base_ht + montant_taxes, 2)
 
-                for entry in product_entries:
-                    match = re.match(r'^(\d+)\s+(.+)$', entry)
-                    if not match:
-                        response = f"Format invalide pour la ligne : '{entry}'. Format attendu : 'quantité référence/nom'."
-                        logging.info(f"Invalid product line: {entry}")
-                        return jsonify({"response": response})
+                    # Update session with totals
+                    session['data']['base_ht'] = base_ht
+                    session['data']['montant_taxes'] = montant_taxes
+                    session['data']['net_a_payer'] = net_a_payer
 
-                    # Extract quantity and product reference/name
-                    quantity_str, product_ref_or_name = match.groups()
+                    logging.info(f"Session data before PDF generation: {session['data']}")
+
+                    # Generate the PDF
                     try:
-                        quantity = int(quantity_str)
-                    except ValueError:
-                        response = f"Quantité invalide pour le produit '{product_ref_or_name}'. Veuillez entrer un nombre entier valide."
-                        return jsonify({"response": response})
+                        pdf_data = generate_quote_base64(session['data']['nom_entreprise'], items)
+                    except Exception as pdf_error:
+                        logging.error(f"Error generating PDF: {pdf_error}")
+                        return jsonify({"response": "Une erreur est survenue lors de la génération du devis. Veuillez réessayer plus tard."})
 
-                    # Query the database for matching products
-                    logging.info(f"Querying product: {product_ref_or_name}")
+                    # Clear session after generating PDF
+                    session.clear()
+                    response = (f"Merci ! Vos informations ont été enregistrées. "
+                                f"Le montant total est {base_ht} EUR, avec {montant_taxes} EUR de taxes. Votre devis est prêt.")
+                    return jsonify({
+                        "response": response,
+                        "pdf_data": pdf_data,
+                        "pdf_filename": "devis_rempli.pdf"
+                    })
+
+                # Process manual product entries
+                product_entries = user_input.splitlines()
+                for entry in product_entries:
+                    match = re.match(r'^(\d+)\s+(.+)$', entry.strip())
+                    if not match:
+                        return jsonify({"response": f"Format invalide pour la ligne : '{entry}'. Réessayez."})
+
+                    quantity, product_ref_or_name = match.groups()
+                    quantity = int(quantity)
+
+                    # Query the database for product details
                     cursor.execute('''
                         SELECT ref, designation, prix_achat, stock
                         FROM new_product
                         WHERE ref ILIKE %s OR designation ILIKE %s
                     ''', (f"%{product_ref_or_name}%", f"%{product_ref_or_name}%"))
-                    products = cursor.fetchall()
-                    logging.info(f"Product query result: {products}")
+                    product = cursor.fetchone()
 
-                    if not products:
-                        response = f"Le produit '{product_ref_or_name}' est introuvable. Veuillez vérifier la référence ou le nom."
-                        return jsonify({"response": response})
+                    if not product:
+                        return jsonify({"response": f"Produit '{product_ref_or_name}' introuvable. Vérifiez la référence ou le nom."})
 
-                    if len(products) > 1:
-                        # Handle multiple matches for the product
-                        product_options = [{"ref": p[0], "designation": p[1], "prix_achat": float(p[2]), "stock": p[3]} for p in products]
-                        session['data']['pending_choices'] = {
-                            "product_ref_or_name": product_ref_or_name,
-                            "quantity": quantity,
-                            "options": product_options
-                        }
-                        options_text = ", ".join([f"{opt['ref']} ({opt['designation']})" for opt in product_options])
-                        response = (f"Le produit '{product_ref_or_name}' correspond à plusieurs références : {options_text}. "
-                                    f"Veuillez choisir une référence en saisissant le code exact.")
-                        session['step'] = 6  # Move to step 6 for user choice
-                        return jsonify({"response": response})
-
-                    # Single product match
-                    product = products[0]
                     product_reference, product_name, product_price, stock = product
+
+                    # Calculate predicted price and total
                     predicted_price = analyze_and_set_price(
                         prix_achat=float(product_price),
                         prix_ventes=None,
@@ -335,163 +522,107 @@ def chat():
                         ref_produit=product_reference
                     )
                     total_produit = round(predicted_price * quantity, 2)
-                    session['data']['products'].append({
+
+                    # Append the product to session data
+                    product_data = {
                         "reference": product_reference,
                         "produit": product_name,
                         "quantite": quantity,
+                        "prix_unitaire_brut": product_price,
+                        "prix_unitaire": predicted_price,
                         "total_produit": total_produit
-                    })
-                    logging.info(f"Added product to session: {session['data']['products'][-1]}")
+                    }
+                    session['data']['products'].append(product_data)
 
-                response = "Tous les produits ont été ajoutés. Souhaitez-vous en ajouter d'autres ? (oui/non)"
-                session['step'] = 7  # Move to confirmation step
-                return jsonify({"response": response})
+                return jsonify({"response": "Produits ajoutés. Souhaitez-vous en ajouter d'autres ? (oui/non)"})
 
             except Exception as e:
-                logging.error(f"Error in step 5: {e}", exc_info=True)
-                return jsonify({"response": "Une erreur interne est survenue. Veuillez réessayer plus tard."}), 500
+                logging.error(f"Error in manual entry: {e}", exc_info=True)
+                return jsonify({"response": "Une erreur est survenue. Veuillez réessayer plus tard."})
 
-        elif step == 7:
+        elif step == 7:  # Confirmation step
             try:
-                if user_input.lower() == "oui":
-                    response = "Indiquez, s'il vous plaît, les produits supplémentaires avec les quantités et références (par exemple : '5 TUY6169 2 Aluminium')."
-                    session['step'] = 5
-                    logging.info(f"User chose to add more products in {time.time() - start_time:.2f}s")
-                    return jsonify({"response": response})
+                if not session['data']['products']:
+                    return jsonify({"response": "Aucun produit ajouté. Veuillez ajouter des produits avant de continuer."})
 
-                elif user_input.lower() == "non":
-                    try:
-                        # Calculate total_commande (Base HT) and create items list for PDF
-                        items = []
-                        total_commande = 0  # Initialize Base HT
-                        for product in session['data']['products']:
-                            # Append product details to items list
-                            items.append({
-                                'reference': product['reference'],
-                                'produit': product['produit'],
-                                'quantite': product['quantite'],
-                                'prix_brut': product.get('prix_brut', 0),  # Default to 0 if not present
-                                'coulee': product.get('coulee', ''),       # Default to empty if not present
-                                'prix_unitaire': product['total_produit'] / product['quantite'],
-                                'total': product['total_produit']
-                            })
-                            total_commande += product['total_produit']  # Increment Base HT
-                        total_commande = round(total_commande, 2)
+                # Compute totals
+                items = session['data']['products']
+                base_ht = sum(item['total_produit'] for item in items)
+                montant_taxes = round(base_ht * 0.2, 2)  # Assuming 20% VAT
+                net_a_payer = round(base_ht + montant_taxes, 2)
 
-                        # Calculate Montant TVA and Net à Payer
-                        montant_taxes = round((total_commande * 20) / 100, 2)  # Assuming 20% VAT
-                        net_a_payer = round(total_commande + montant_taxes, 2)
+                session['data']['base_ht'] = base_ht
+                session['data']['montant_taxes'] = montant_taxes
+                session['data']['net_a_payer'] = net_a_payer
 
-                        # Add calculated values to session for persistence
-                        session['data']['base_ht'] = total_commande
-                        session['data']['montant_taxes'] = montant_taxes
-                        session['data']['net_a_payer'] = net_a_payer
+                # Generate PDF
+                pdf_data = generate_quote_base64(session['data']['nom_entreprise'], items)
 
-                        # Insert order details into the database
-                        for product in session['data']['products']:
-                            current_date = datetime.now().strftime('%Y-%m-%d')  # Format date for SQL
-
-                            cursor.execute('''
-                                INSERT INTO informations (
-                                    nom_entreprise, adresse_entreprise, n_tva, nom_user, ref_produit, produit, quantite, 
-                                    total_produit, total_commande, montant_taxes, net_a_payer, date
-                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ''', (
-                                session['data']['nom_entreprise'],
-                                session['data']['adresse_entreprise'],
-                                session['data']['n_tva'],
-                                session['data']['nom_user'],
-                                product['reference'],
-                                product['produit'],
-                                product['quantite'],
-                                float(product['total_produit']),
-                                session['data']['base_ht'],
-                                session['data']['montant_taxes'],
-                                session['data']['net_a_payer'],
-                                current_date,
-
-                            ))
-                        conn.commit()
-                        logging.info(f"Insert data: {session['data']}")
-                        logging.info(f"Product: {product}")
-                        logging.info(f"Current Date: {current_date}")
-                        # Generate PDF
-                        pdf_data = generate_quote_base64(session['data']['nom_entreprise'], items)
-                        logging.info(f"Base HT: {session['data'].get('base_ht', 0)}, Montant TVA: {session['data'].get('montant_taxes', 0)}, Net à Payer: {session['data'].get('net_a_payer', 0)}")
-
-                        # Clear session after storing everything
-                        session.clear()
-
-                        response = (f"Merci infiniment ! Vos informations ont été enregistrées avec succès. "
-                                    f"Le montant total de la commande s'élève à {total_commande} EUR, avec des taxes de {montant_taxes} EUR.")
-                        logging.info(f"Step 7 completed in {time.time() - start_time:.2f}s")
-                        return jsonify({
-                            "response": response,
-                            "pdf_data": pdf_data,
-                            "pdf_filename": "devis_rempli.pdf"
-                        })
-
-                    except Exception as e:
-                        logging.error(f"Error inserting order details into the database: {e}")
-                        conn.rollback()
-                        return jsonify({"response": "Erreur lors de l'enregistrement des détails de la commande."}), 500
-
-                else:
-                    response = "Réponse non reconnue. Veuillez répondre par 'oui' ou 'non'."
-                    logging.info(f"Invalid response in step 7: {user_input}")
-                    return jsonify({"response": response})
-
+                # Clear session after processing
+                response = (f"Merci ! Vos informations ont été enregistrées. "
+                            f"Le montant total est {base_ht} EUR, avec {montant_taxes} EUR de taxes.")
+                session.clear()
+                return jsonify({
+                    "response": response,
+                    "pdf_data": pdf_data,
+                    "pdf_filename": "devis_rempli.pdf"
+                })
             except Exception as e:
-                logging.error(f"General error in step 7: {e}")
-                return jsonify({"response": "Une erreur interne est survenue. Veuillez réessayer plus tard."}), 500
+                logging.error(f"Error generating PDF: {e}")
+                return jsonify({"response": "Une erreur est survenue lors de la génération du devis. Veuillez réessayer plus tard."})
+
     except Exception as e:
-                logging.error(f"General error in chat : {e}")
-                return jsonify({"response": "Une erreur interne est survenue. Veuillez réessayer plus tard."}), 500
+            logging.error(f"Error generating PDF: {e}")
+    return jsonify({"response": "Une erreur est survenue lors de la génération du devis. Veuillez réessayer plus tard."})
+    
 
 def generate_quote_base64(client_name, items, output_file="quote.pdf"):
-    """
-    Generates a quote PDF for the given client and items and returns it as a base64 string.
+    try:
+        # Ensure all items have the necessary keys
+        for item in items:
+            item.setdefault('prix_brut', 0.0)
+            item.setdefault('coulee', 'N/A')
 
-    Args:
-        client_name (str): Name of the client.
-        items (list): List of items, where each item is a dictionary with 'reference', 'produit', 'quantite', 'prix_brut', 'coulee', 'prix_unitaire', and 'total'.
-        output_file (str): Name of the output PDF file.
+        # Load the HTML template
+        env = Environment(loader=FileSystemLoader("templates"))
+        template = env.get_template("quote_template.html")
+        current_date = datetime.now().strftime('%d/%m/%Y')
 
-    Returns:
-        str: Base64-encoded PDF content.
-    """
-    # Add default values to items for missing keys
-    for item in items:
-        item.setdefault('prix_brut', 0.0)
-        item.setdefault('coulee', '')
+        # Render the template with the provided data
+        html_content = template.render(
+            client_name=client_name,
+            client_address=session['data']['adresse_entreprise'],
+            client_tva=session['data']['n_tva'],
+            items=items,
+            base_ht=session['data'].get('base_ht', 0),
+            montant_taxes=session['data'].get('montant_taxes', 0),
+            net_a_payer=session['data'].get('net_a_payer', 0),
+            date=current_date
+        )
 
-    # Load the HTML template
-    env = Environment(loader=FileSystemLoader("templates"))
-    template = env.get_template("quote_template.html")
-    current_date = datetime.now().strftime('%d/%m/%Y')
+        # Log HTML content for debugging
+        logging.info(f"Generated HTML content for PDF:\n{html_content}")
 
-    # Render the template with data
-    html_content = template.render(
-    client_name=session['data']['nom_entreprise'],
-    client_address=session['data']['adresse_entreprise'],
-    client_tva=session['data']['n_tva'],
-    items=items,
-    base_ht=session['data'].get('base_ht', 0),
-    montant_taxes=session['data'].get('montant_taxes', 0),
-    net_a_payer=session['data'].get('net_a_payer', 0),
-    date=current_date
-    )
+        # Ensure all paths (e.g., images) are correct
+        options = {
+            'enable-local-file-access': '',  # Required for local images
+            'quiet': ''  # Suppress verbose output
+        }
 
-    # Generate PDF using pdfkit
-    pdfkit.from_string(html_content, output_file, options={
-        'enable-local-file-access': None  # Enable access to local files
-    })
+        pdfkit.from_string(html_content, output_file, options=options)
 
-    # Encode the PDF in base64
-    with open(output_file, "rb") as pdf_file:
-        base64_pdf = base64.b64encode(pdf_file.read()).decode("utf-8")
+        # Log PDF generation success
+        logging.info(f"PDF generated successfully: {output_file}")
 
-    return base64_pdf
+        # Encode PDF to base64
+        with open(output_file, "rb") as pdf_file:
+            base64_pdf = base64.b64encode(pdf_file.read()).decode("utf-8")
+
+        return base64_pdf
+
+    except Exception as e:
+        logging.error(f"Error generating PDF: {e}", exc_info=True)
+        raise RuntimeError(f"Failed to generate PDF: {e}")
 
     
 if __name__ == '__main__':

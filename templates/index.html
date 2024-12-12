@@ -188,6 +188,26 @@
             0%, 100% { opacity: 0.3; }
             50% { opacity: 1; }
         }
+        #upload-button {
+            margin-left: 10px;
+            padding: 10px 20px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        #upload-button:hover {
+            background-color: #218838;
+        }
+
+        /* File input hidden by default */
+        #file-input {
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -197,6 +217,8 @@
         <div id="input-section">
             <textarea id="user-input" placeholder="Type your message..." rows="4"></textarea>
             <button id="send-button" onclick="sendMessage()">Send</button>
+            <button id="upload-button" onclick="triggerFileInput()">Upload File</button>
+            <input type="file" id="file-input" onchange="handleFileUpload(event)">
         </div>
     </div>
 
@@ -246,6 +268,42 @@
                 hideTypingIndicator();
             }
         }
+         // Trigger the hidden file input
+         function triggerFileInput() {
+            document.getElementById("file-input").click();
+        }
+        async function handleFileUpload(event) {
+    const file = event.target.files[0];
+
+    if (!file) {
+        alert("No file selected!");
+        return;
+    }
+
+    const chatBox = document.getElementById("chat-box");
+    showTypingIndicator();
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const response = await fetch("/chat", {
+            method: "POST",
+            body: formData,
+        });
+
+        const data = await response.json();
+        hideTypingIndicator();
+        displayResponse(data);
+    } catch (error) {
+        console.error("Error uploading file:", error);
+        displayResponse({ response: "Error uploading file." });
+        hideTypingIndicator();
+    } finally {
+        // Reset the file input so users can reselect files
+        event.target.value = "";
+    }
+}
 
         async function sendMessage() {
             const userInput = document.getElementById("user-input").value.trim();
@@ -291,7 +349,7 @@
                 const pdfLink = document.createElement("a");
                 pdfLink.href = pdfUrl;
                 pdfLink.download = data.pdf_filename || "document.pdf";
-                pdfLink.textContent = "Download File";
+                pdfLink.textContent = "📄 Download Devis (PDF)";
                 pdfLink.target = "_blank";
 
                 pdfLinkDiv.appendChild(pdfLink);
