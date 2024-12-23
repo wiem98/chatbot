@@ -66,11 +66,11 @@
         <!-- Informations de l'entreprise cliente -->
         <div style="text-align: right; font-size: 12px; line-height: 1.5;">
             <p style="margin: 0;">
-                <strong>{{ client_name }}</strong><br>
-                {{ client_address }}<br>
-                N° TVA : {{ client_tva }}<br>
+                <strong>total</strong><br>
+                ariena<br>
+                N° TVA : FR12345678999<br>
             </p>
-            <p><strong>Date :</strong> {{ date }}</p>
+            <p><strong>Date :</strong> 20/12/2024</p>
         </div>
     </header>
     
@@ -89,17 +89,17 @@
             </tr>
         </thead>
         <tbody>
-            {% for item in items %}
+            
             <tr>
-                <td>{{ item.reference }}</td>
-                <td>{{ item.description }}</td> <!-- Corrected key from 'produit' to 'description' -->
-                <td>{{ item.quantite }}</td>
-                <td>{{ item.prix_unitaire }}</td> <!-- Ensure 'prix_brut' is set in the backend -->
-                <td>{{ item.coulee }}</td>
-                <td>{{ item.prix_unitaire }}</td>
-                <td>{{ item.total_produit }}</td>
+                <td>CIPO-8</td>
+                <td>CINTREUSE POUR TUBE 8MM</td> <!-- Corrected key from 'produit' to 'description' -->
+                <td>11</td>
+                <td>173.71</td> <!-- Ensure 'prix_brut' is set in the backend -->
+                <td>N/A</td>
+                <td>173.71</td>
+                <td>1910.81</td>
             </tr>
-            {% endfor %}
+            
         </tbody>
         
     </table>
@@ -107,15 +107,15 @@
     <table>
         <tr>
             <td class="total">Base HT</td>
-            <td>{{ base_ht }}</td>
+            <td>1910.81</td>
         </tr>
         <tr>
             <td class="total">Montant TVA</td>
-            <td>{{ montant_taxes }}</td>
+            <td>382.16</td>
         </tr>
         <tr>
             <td class="total">Net à payer TTC</td>
-            <td>{{ net_a_payer }}</td>
+            <td>2292.97</td>
         </tr>
     </table>
     
