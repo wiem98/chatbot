@@ -7,27 +7,27 @@ from jinja2 import Environment, FileSystemLoader
 import pdfkit
 import pandas as pd
 import joblib
-from openpyxl import load_workbook  # 
 import logging
 from sklearn.impute import SimpleImputer
 import base64
-import time
+from datetime import datetime, timedelta  # Fixed import
 import os
-import magic
-from datetime import datetime, date
-import chardet
-import mimetypes
-import easyocr  # For OCR from images
-import pdfplumber  # For extracting text and tables from PDFs
-import shap
+from datetime import datetime
+from io import BytesIO
 import matplotlib.pyplot as plt
+from responses import get_variable_response
+from pdf2image import convert_from_path
+from flask_mail import Message
+from mail_config import init_mail
+import base64
 
 app = Flask(__name__)
 app.secret_key = 'wiem3551'
+mail = init_mail(app)
 
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_PERMANENT'] = False  # Optional, makes session non-permanent
-Session(app)  # Initialize the session extension
+app.config['SESSION_PERMANENT'] = False
+Session(app)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
@@ -59,12 +59,69 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='informations' AND column_name='total_produit') THEN
         ALTER TABLE informations ADD COLUMN total_produit NUMERIC(10, 2);
     END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='informations' AND column_name='status') THEN
+        ALTER TABLE informations ADD COLUMN status VARCHAR(50);
+    END IF;
 END $$;
 ''')
 conn.commit()
+def send_email(recipient, subject, pdf_data, client_name):
+    try:
+        # Render the HTML email template
+        env = Environment(loader=FileSystemLoader("templates"))
+        template = env.get_template("email_template.html")
+        html_content = template.render(client_name=client_name)
 
-# Load the ML model
-MODEL_PATH = r'C:\Users\LENOVO\new\models\gradient_boosting_model2.pkl'
+        # Ensure the Base64 string is properly padded
+        if isinstance(pdf_data, str):
+            missing_padding = len(pdf_data) % 4
+            if missing_padding != 0:
+                pdf_data += "=" * (4 - missing_padding)
+
+        # Decode the Base64-encoded PDF data
+        pdf_stream = BytesIO(base64.b64decode(pdf_data))
+
+        # Create the email message
+        msg = Message(subject, recipients=[recipient])
+        msg.html = html_content  # Set the HTML content
+
+        # Attach the PDF file
+        msg.attach("devis.pdf", "application/pdf", pdf_stream.read())
+
+        # Send the email
+        mail.send(msg)
+        logging.info(f"E-mail successfully sent to {recipient}")
+        return True
+    except Exception as e:
+        logging.error(f"Error sending email: {e}", exc_info=True)
+        return False
+
+
+def normalize_input(user_input):
+    """
+    Normalize user input to handle slight variations in natural language using a lexicon.
+    """
+    # Predefined lexicon mapping phrases to normalized commands
+    lexicon = {
+        r"(je veux|je souhaite|svp|veuillez)": "",  # Remove polite filler phrases
+        r"(le nom est|mon nom est)": "set_name",  # Normalize name setting
+        r"(créer|nouveau|initier)": "create",  # Normalize creation commands
+        r"(commander|acheter|order)": "order",  # Normalize order commands
+        r"(adresse|l'adresse est)": "set_address",  # Normalize address commands
+    }
+    
+    # Lowercase and trim input
+    user_input = user_input.lower().strip()
+    
+    # Apply replacements from the lexicon
+    for pattern, replacement in lexicon.items():
+        user_input = re.sub(pattern, replacement, user_input)
+    
+    # Remove extra spaces
+    user_input = re.sub(r"\s+", " ", user_input).strip()
+    return user_input
+
+MODEL_PATH = r'C:\\Users\\LENOVO\\new\\models\\gradient_boosting_model2.pkl'
 loaded_model = joblib.load(MODEL_PATH)
 print(loaded_model.feature_names_in_)
 
@@ -77,408 +134,630 @@ def add_headers(response):
 
 @app.route('/')
 def home():
-    """
-    Clear the session and render the home page.
-    """
-    session.clear()  # Clear the session to restart the flow
+    session.clear()
     logging.info("Session cleared: Restarting steps.")
     return render_template('index.html')
-
-
-@app.route('/predict_price', methods=['POST'])
-def predict_price():
-    try:
-        # Reuse the pre-loaded model
-        data = request.json
-        input_features = pd.DataFrame([{
-            'prix_achat': data['prix_achat'],
-            'quantite': data['quantite'],
-            'stock': data['stock'],
-            'markup': data.get('markup', 0),
-            'is_low_stock': data['stock'] < 20,
-            'is_high_stock': data['stock'] > 200,
-        }])
-
-        predicted_price = loaded_model.predict(input_features)[0]
-        return jsonify({"predicted_price": round(predicted_price, 2)})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
-    
-def analyze_and_set_price(prix_achat, prix_ventes, company_name, ref_produit):
-    try:
-        # Query stock
-        cursor.execute('SELECT stock FROM new_product WHERE ref = %s', (ref_produit,))
-        stock_result = cursor.fetchone()
-        stock = float(stock_result[0]) if stock_result else 100.0  # Ensure stock is float
-
-        # Historical sales
-        cursor.execute('SELECT prix_initial FROM informations WHERE ref_produit = %s', (ref_produit,))
-        historical_sales = cursor.fetchall()
-
-        # Compute markup
-        markup = 0.0  # Default markup
-        if historical_sales:
-            historical_df = pd.DataFrame(historical_sales, columns=['prix_initial'])
-            historical_df['prix_initial'] = historical_df['prix_initial'].astype(float)  # Convert to float
-            historical_df['markup'] = (historical_df['prix_initial'] - float(prix_achat)) / float(prix_achat)
-            markup = historical_df['markup'].mean()
-
-        # Prepare input features
-        input_features = pd.DataFrame([{
-            'prix_achat': float(prix_achat),  # Convert prix_achat to float
-            'quantite': 1.0,
-            'stock': stock,
-            'markup': markup if not pd.isna(markup) else 0.0,  # Handle NaN markup
-            'is_low_stock': stock < 20.0,
-            'is_high_stock': stock > 200.0,
-            'year': 2024,
-            'month': 12
-        }])
-
-        input_features = input_features.reindex(columns=loaded_model.feature_names_in_, fill_value=0)
-
-        # Impute missing values
-        imputer = SimpleImputer(strategy='mean')
-        input_features = pd.DataFrame(imputer.fit_transform(input_features), columns=input_features.columns)
-
-        # Predict price
-        predicted_price = loaded_model.predict(input_features)[0]
-
-        # SHAP analysis
-        try:
-            explainer = shap.TreeExplainer(loaded_model)
-            shap_values = explainer.shap_values(input_features)
-
-            # Create directory structure for SHAP plots
-            shap_dir = r"C:\\Users\\LENOVO\\new\\shap_plot"
-            os.makedirs(shap_dir, exist_ok=True)  # Ensure base directory exists
-
-            # Save SHAP summary plot
-            summary_plot_path = os.path.join(shap_dir, f"summary_plot_{ref_produit}.png")
-            plt.figure()
-            shap.summary_plot(shap_values, input_features, show=False)
-            plt.savefig(summary_plot_path, bbox_inches='tight')
-            plt.close()
-
-            # Save SHAP waterfall plot
-            waterfall_plot_path = os.path.join(shap_dir, f"waterfall_plot_{ref_produit}.png")
-            plt.figure()
-            shap.waterfall_plot(shap_values[0], input_features.iloc[0], show=False)
-            plt.savefig(waterfall_plot_path, bbox_inches='tight')
-            plt.close()
-
-            logging.info(f"SHAP plots saved successfully: {summary_plot_path}, {waterfall_plot_path}")
-
-        except Exception as shap_error:
-            logging.error(f"Error during SHAP analysis: {shap_error}")
-
-        return round(predicted_price, 2)
-
-    except Exception as e:
-        logging.error(f"Error in analyze_and_set_price: {e}")
-        return round(float(prix_achat) * 1.25, 2)  # Fallback calculation
-    
-STATUS_MODEL_PATH = r'models\client_status_model_20241219_134757.pkl'
-status_model = joblib.load(STATUS_MODEL_PATH)
-
-def predict_client_status(client_data):
+def log_status_change(client_name, old_status, new_status, reason):
     """
-    Predicts the client status using the trained model.
-
-    Args:
-        client_data (dict): A dictionary containing client features.
-
-    Returns:
-        str: Predicted client status ('nouveau', 'normal', 'VIP').
+    Logs the status change of a client into the status_history table.
     """
     try:
-        input_features = pd.DataFrame([client_data]).reindex(
-            columns=status_model.feature_names_in_, fill_value=0
+        cursor.execute(
+            """
+            INSERT INTO status_history (client_name, old_status, new_status, reason, change_date)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (client_name, old_status, new_status, reason, datetime.now())
         )
-        status_index = status_model.predict(input_features)[0]
-        status_mapping = {0: 'nouveau', 1: 'normal', 2: 'VIP'}
-        return status_mapping.get(status_index, 'unknown')
+        conn.commit()
+        logging.info(f"Status change logged for client '{client_name}': {old_status} -> {new_status}")
     except Exception as e:
-        logging.error(f"Error predicting client status: {e}")
-        return "unknown"
-
-@app.route('/save_informations', methods=['POST'])
-def save_informations():
+        logging.error(f"Failed to log status change for client '{client_name}': {e}", exc_info=True)
+MODEL_PATH = r'C:\\Users\\LENOVO\\new\\models\\client_status_model_enhanced.pkl'
+try:
+    status_model = joblib.load(MODEL_PATH)
+    logging.info("Status prediction model loaded successfully.")
+except Exception as e:
+    logging.error(f"Failed to load the status prediction model: {e}")
+    raise RuntimeError("Model loading failed.")
+# Helper functions
+def log_status_change(client_name, old_status, new_status, reason):
+    """
+    Logs the status change of a client into the status_history table.
+    """
     try:
-        # Extract data from the request
-        data = request.json  # Assume data is sent in JSON format
+        cursor.execute(
+            """
+            INSERT INTO status_history (client_name, old_status, new_status, reason, change_date)
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (client_name, old_status, new_status, reason, datetime.now())
+        )
+        conn.commit()
+        logging.info(f"Status change logged for client '{client_name}': {old_status} -> {new_status}")
+    except Exception as e:
+        logging.error(f"Failed to log status change for client '{client_name}': {e}", exc_info=True)
 
-        # Define the required fields
-        required_fields = [
-            'nom_entreprise', 'nom_user', 'produit', 'quantite',
-            'adresse_entreprise', 'n_tva', 'total_produit', 
-            'total_commande', 'montant_taxes', 'net_a_payer',
-            'ref_produit', 'prix_initial', 'prix_unitaire', 'date', 'prix_ventes'
+def predict_status(features):
+    """
+    Predicts the client status using the pre-trained RandomForest model.
+    """
+    try:
+        # Ensure feature format matches the model input
+        feature_vector = [
+            features['total_spending'],
+            features['total_quantity'],
+            features['recency'],
+            features['predicted_spending'],
+            features['avg_quantity'],
+            features['purchase_frequency'],
+            features['average_spending'],
+            features['churn_indicator'],
+            features['total_spending_last_3_months'],
+            features['large_purchase'],
+            features['frequent_low_selling_purchase']
         ]
+        prediction = status_model.predict([feature_vector])[0]
+        status_mapping = {0: 'nouveau', 1: 'normal', 2: 'VIP'}
+        return status_mapping[prediction]
+    except Exception as e:
+        logging.error(f"Status prediction failed: {e}")
+        return "unknown"
+def detect_action(user_input):
+    user_input = user_input.lower().strip()  # Normalize input
+    match = re.match(r"(ajouter|modifier|supprimer)\s*(.*)", user_input)
+    if match:
+        action, params = match.groups()
+        return action, params
+    return None, None
 
-        # Check for missing fields
-        missing_fields = [field for field in required_fields if field not in data]
-        if missing_fields:
-            return jsonify({"status": "error", "message": f"Missing fields: {', '.join(missing_fields)}"}), 400
+def add_product(quantity, reference, session, cursor, conn):
+    try:
+        cursor.execute("SELECT designation, prix_achat FROM new_product WHERE ref ILIKE %s", (reference,))
+        product = cursor.fetchone()
 
-        # SQL Query to insert data into the `informations` table
-        query = """
-        INSERT INTO informations (
-            nom_entreprise, nom_user, produit, quantite, adresse_entreprise, n_tva, 
-            total_produit, total_commande, montant_taxes, net_a_payer, 
-            ref_produit, prix_initial, prix_unitaire, date, prix_ventes
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """
-        values = (
-            data['nom_entreprise'], data['nom_user'], data['produit'], data['quantite'],
-            data['adresse_entreprise'], data['n_tva'], data['total_produit'], 
-            data['total_commande'], data['montant_taxes'], data['net_a_payer'],
-            data['ref_produit'], data['prix_initial'], data['prix_unitaire'], data['date'], data['prix_ventes']
+        if not product:
+            return jsonify({"response": f"Produit introuvable. Référence '{reference}' non trouvée."})
+
+        designation, prix_achat = product
+        total_produit = round(int(quantity) * float(prix_achat), 2)
+
+        existing_product = next(
+            (prod for prod in session['data']['products'] if prod['reference'] == reference), None
         )
 
-        # Execute the query
-        cursor.execute(query, values)
-        conn.commit()  # Commit the transaction
+        if existing_product:
+            existing_product['quantite'] += int(quantity)
+            existing_product['total_produit'] = round(existing_product['quantite'] * existing_product['prix_unitaire'], 2)
 
-        # Return success response
-        logging.info("Data successfully saved to the 'informations' table.")
-        return jsonify({"status": "success", "message": "Data saved successfully!"})
+            cursor.execute(
+                """
+                UPDATE informations
+                SET quantite = %s, total_produit = %s
+                WHERE nom_entreprise = %s AND ref_produit = %s
+                """,
+                (existing_product['quantite'], existing_product['total_produit'], session['data']['nom_entreprise'], reference)
+            )
+        else:
+            session['data']['products'].append({
+                "reference": reference,
+                "description": designation,
+                "quantite": int(quantity),
+                "prix_unitaire": float(prix_achat),
+                "total_produit": total_produit
+            })
+
+            cursor.execute(
+                """
+                INSERT INTO informations (
+                    nom_entreprise, nom_user, produit, quantite, 
+                    total_produit, ref_produit, prix_initial, date
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    session['data']['nom_entreprise'],
+                    session['data']['nom_user'],
+                    designation,
+                    quantity,
+                    total_produit,
+                    reference,
+                    prix_achat,
+                    datetime.now()
+                )
+            )
+
+        conn.commit()
+        session.modified = True
+        pdf_data, preview_image, pdf_path = generate_quote_base64(
+            session['data']['nom_entreprise'], session['data']['products'], 
+            archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+        )
+        session['data']['pdf_path'] = pdf_path
+
+        return jsonify({
+            "response": f"Produit '{designation}' ajouté avec succès !",
+            "preview_image": f"data:image/jpeg;base64,{preview_image}",
+            "pdf_data": pdf_data,
+            "pdf_filename": "devis_rempli.pdf"
+        })
 
     except Exception as e:
-        logging.error(f"Error saving data to the 'informations' table: {e}", exc_info=True)
-        return jsonify({"status": "error", "message": str(e)})
-    
+        conn.rollback()
+        logging.error(f"Error adding product: {e}", exc_info=True)
+        return jsonify({"response": "Erreur lors de l'ajout du produit."})
+
+def update_product(quantity, reference, session, cursor, conn):
+    try:
+        product_found = False
+        for product in session['data']['products']:
+            if product['reference'] == reference:
+                product_found = True
+                product['quantite'] = int(quantity)
+                product['total_produit'] = round(int(quantity) * product['prix_unitaire'], 2)
+
+                cursor.execute(
+                    """
+                    UPDATE informations
+                    SET quantite = %s, total_produit = %s
+                    WHERE nom_entreprise = %s AND ref_produit = %s
+                    """,
+                    (quantity, product['total_produit'], session['data']['nom_entreprise'], reference)
+                )
+                conn.commit()
+
+                pdf_data, preview_image, pdf_path = generate_quote_base64(
+                    session['data']['nom_entreprise'], session['data']['products'], 
+                    archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+                )
+                session['data']['pdf_path'] = pdf_path
+
+                return jsonify({
+                    "response": f"Produit '{product['description']}' modifié avec succès !",
+                    "preview_image": f"data:image/jpeg;base64,{preview_image}",
+                    "pdf_data": pdf_data,
+                    "pdf_filename": "devis_rempli.pdf"
+                })
+
+        if not product_found:
+            return jsonify({"response": f"Produit '{reference}' non trouvé."})
+
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error updating product: {e}", exc_info=True)
+        return jsonify({"response": "Erreur lors de la modification du produit."})
+
+def remove_product(reference, session, cursor, conn):
+    try:
+        if len(session['data']['products']) <= 1:
+            return jsonify({"response": "Un devis ne peut pas être vide. Ajoutez un produit avant d'en supprimer un."})
+
+        session['data']['products'] = [
+            product for product in session['data']['products']
+            if product['reference'] != reference
+        ]
+        session.modified = True
+
+        cursor.execute(
+            """
+            DELETE FROM informations
+            WHERE nom_entreprise = %s AND ref_produit = %s
+            """,
+            (session['data']['nom_entreprise'], reference)
+        )
+        conn.commit()
+
+        pdf_data, preview_image, pdf_path = generate_quote_base64(
+            session['data']['nom_entreprise'], session['data']['products'], 
+            archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+        )
+        session['data']['pdf_path'] = pdf_path
+
+        return jsonify({
+            "response": f"Produit '{reference}' supprimé avec succès.",
+            "preview_image": f"data:image/jpeg;base64,{preview_image}",
+            "pdf_data": pdf_data,
+            "pdf_filename": "devis_rempli.pdf"
+        })
+
+    except Exception as e:
+        conn.rollback()
+        logging.error(f"Error removing product: {e}", exc_info=True)
+        return jsonify({"response": "Erreur lors de la suppression du produit."})
+
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
-        start_time = time.time()
-
-        # Step 1: Initialize session
         if 'step' not in session:
             session['step'] = 0
             session['data'] = {'products': [], 'is_partner': False}
-        logging.info(f"Session setup completed in {time.time() - start_time:.2f}s")
-
-        # Step 2: Get user input
+        
         step = session['step']
         data = request.json if request.is_json else None
         user_input = data.get('message', "").strip() if data else ""
+        user_input = normalize_input(user_input)
 
-        logging.info(f"Processing step {step}. User input: {user_input}")
 
-        # Step 3: Process based on the current step
         if step == 0:
-            response = "Bonjour et bienvenue ! Pourriez-vous, s'il vous plaît, me fournir le nom de votre entreprise ?"
             session['step'] = 1
-            return jsonify({"response": response})
+            return jsonify({"response": get_variable_response("welcome")})
 
         elif step == 1:
-            session['data']['nom_entreprise'] = user_input
-            response = "Merci beaucoup. Pourriez-vous également indiquer l'adresse complète de votre entreprise ?"
             session['step'] = 2
-            return jsonify({"response": response})
+            return jsonify({"response": get_variable_response("ask_company_name")})
 
         elif step == 2:
-            session['data']['adresse_entreprise'] = user_input
-            response = "Merci. Pourriez-vous me communiquer le numéro de TVA de votre entreprise ?"
+            session['data']['nom_entreprise'] = user_input
             session['step'] = 3
-            return jsonify({"response": response})
+            return jsonify({"response": get_variable_response("ask_company_address")})
 
         elif step == 3:
-            if not re.match(r"^FR\d{11}$", user_input):
-                return jsonify({"response": "Numéro de TVA invalide. Recommencez avec 'FR' suivi de 11 chiffres."})
-            session['data']['n_tva'] = user_input
-            response = "Merci beaucoup. Puis-je également connaître votre nom complet pour nos enregistrements ?"
+            session['data']['adresse_entreprise'] = user_input
             session['step'] = 4
-            return jsonify({"response": response})
+            return jsonify({"response": get_variable_response("ask_vat_number")})
 
         elif step == 4:
-            session['data']['nom_user'] = user_input
-            response = "Merci. Indiquez les quantités et les références ou noms des produits (par exemple : '5 TUY6169 2 Aluminium')."
+            user_input = user_input.strip().upper()  # Ensure input is cleaned and uppercase
+            if not re.match(r"^FR\d{11}$", user_input):
+                return jsonify({"response": "Le numéro de TVA que vous avez saisi est invalide. Assurez-vous qu'il commence par 'FR' suivi de 11 chiffres. Exemple : 'FR12345678901'."})
+            session['data']['n_tva'] = user_input
             session['step'] = 5
-            return jsonify({"response": response})
+            return jsonify({"response": get_variable_response("ask_email")})
 
-        elif step == 5:  # Manual entry of products
-            try:
-                # Check if user has finished adding products
-                if user_input.lower() == "non":
-                    if not session['data']['products']:
-                        logging.error("No products found in session data.")
-                        return jsonify({"response": "Aucun produit ajouté. Veuillez ajouter des produits avant de continuer."})
 
-                    # Calculate totals
-                    items = session['data']['products']
-                    base_ht = sum(item['total_produit'] for item in items)
-                    montant_taxes = round(base_ht * 0.2, 2)  # Assuming 20% VAT
-                    net_a_payer = round(base_ht + montant_taxes, 2)
+        elif step == 5:
+            if not re.match(r"[^@]+@[^@]+\.[^@]+", user_input):
+                return jsonify({"response": get_variable_response("invalid_email")})
+            session['data']['email'] = user_input
+            session['step'] = 6
+            return jsonify({"response": get_variable_response("ask_user_name")})
 
-                    session['data']['base_ht'] = base_ht
-                    session['data']['montant_taxes'] = montant_taxes
-                    session['data']['net_a_payer'] = net_a_payer
+        elif step == 6:
+            session['data']['nom_user'] = user_input
+            session['step'] = 7
+            return jsonify({"response": get_variable_response("ask_products")})
 
-                    logging.info(f"Final session data for products: {session['data']['products']}")
+        elif step == 7:
+            if user_input.lower() == "non":
+                if not session['data']['products']:
+                    return jsonify({"response": get_variable_response("no_products")})
 
-                    # Store session data in the database
-                    try:
-                        for item in items:
-                            # Calculate prix_ventes if not already present
-                            prix_ventes = round(item['prix_unitaire'] * 1.2, 2)  # Example: Assuming a 20% markup
+                # Calculate order summary
+                items = session['data']['products']
+                base_ht = sum(item['total_produit'] for item in items)
+                montant_taxes = round(base_ht * 0.2, 2)  # Assuming a 20% tax rate
+                net_a_payer = round(base_ht + montant_taxes, 2)
 
-                            query = """
-                            INSERT INTO informations (
-                                nom_entreprise, nom_user, produit, quantite,
-                                adresse_entreprise, n_tva, total_produit, 
-                                total_commande, montant_taxes, net_a_payer,
-                                ref_produit, prix_initial, date, prix_ventes
-                            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                session['data']['base_ht'] = base_ht
+                session['data']['montant_taxes'] = montant_taxes
+                session['data']['net_a_payer'] = net_a_payer
+
+                try:
+                    # Insert or update all products in the database
+                    for item in items:
+                        cursor.execute(
+                            """
+                            SELECT COUNT(*) FROM informations
+                            WHERE nom_entreprise = %s AND ref_produit = %s AND nom_user = %s
+                            """,
+                            (session['data']['nom_entreprise'], item['reference'], session['data']['nom_user'])
+                        )
+                        product_exists = cursor.fetchone()[0]
+
+                        if product_exists:
+                            query_update = """
+                                UPDATE informations
+                                SET quantite = %s, total_produit = %s, prix_ventes = %s
+                                WHERE nom_entreprise = %s AND ref_produit = %s AND nom_user = %s
+                            """
+                            cursor.execute(
+                                query_update,
+                                (
+                                    item['quantite'],  # Updated quantity
+                                    item['total_produit'],  # Updated total price
+                                    item['prix_unitaire'],  # Selling price
+                                    session['data']['nom_entreprise'],
+                                    item['reference'],
+                                    session['data']['nom_user']
+                                )
+                            )
+                        else:
+                            query_insert = """
+                                INSERT INTO informations (
+                                    nom_entreprise, nom_user, produit, quantite,
+                                    adresse_entreprise, n_tva, total_produit, 
+                                    total_commande, montant_taxes, net_a_payer,
+                                    ref_produit, prix_initial, date, prix_ventes, status
+                                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                             """
                             values = (
                                 session['data']['nom_entreprise'],
                                 session['data']['nom_user'],
-                                item['description'],  # Mapping 'description' to 'produit'
-                                item['quantite'],
+                                item['description'],  # Product description
+                                item['quantite'],  # Quantity of the product
                                 session['data']['adresse_entreprise'],
                                 session['data']['n_tva'],
-                                item['total_produit'],
-                                base_ht,
+                                item['total_produit'],  # Quantity * prix_ventes
+                                base_ht,  # Total command value (sum of total_produit)
                                 montant_taxes,
                                 net_a_payer,
-                                item['reference'],  # Reference for 'ref_produit'
-                                None,  # prix_initial can be added if available
-                                datetime.now(),  # Current date for 'date'
-                                prix_ventes  # Use calculated prix_ventes
+                                item['reference'],  # Product reference
+                                item.get('prix_achat', None),  # Initial price (if available)
+                                datetime.now(),  # Current date
+                                item['prix_unitaire'],  # Selling price
+                                "nouveau"  # Default status
                             )
-                            cursor.execute(query, values)
+                            cursor.execute(query_insert, values)
 
-                        conn.commit()
-                        logging.info("Session data successfully saved to the 'informations' table.")
+                    # Handle client status
+                    client_name = session['data']['nom_entreprise']
+                    cursor.execute("SELECT status FROM informations_client WHERE nom_client = %s LIMIT 1", (client_name,))
+                    result = cursor.fetchone()
+                    old_status = result[0] if result else None
 
-                    except Exception as db_error:
-                        logging.error(f"Error saving session data to the 'informations' table: {db_error}")
-                        return jsonify({"response": "Une erreur est survenue lors de l'enregistrement des données."})
+                    # If client doesn't exist, add them as 'nouveau' and log the status change
+                    if old_status is None:
+                        new_status = 'nouveau'
+                        cursor.execute(
+                            """
+                            INSERT INTO informations_client (nom_client, adresse, status, email)
+                            VALUES (%s, %s, %s, %s)
+                            """,
+                            (
+                                client_name,
+                                session['data']['adresse_entreprise'],
+                                new_status,
+                                session['data']['email']
+                            )
+                        )
+                        log_status_change(client_name, old_status, new_status, "New client added")
+                    else:
+                        # Predict new status
+                        features = {
+                            'total_spending': base_ht,
+                            'total_quantity': sum(item['quantite'] for item in items),
+                            'recency': 1,  # Placeholder, calculate actual recency
+                            'predicted_spending': 0,  # Placeholder, fetch from another source if available
+                            'avg_quantity': base_ht / max(sum(item['quantite'] for item in items), 1),
+                            'purchase_frequency': sum(item['quantite'] for item in items),
+                            'average_spending': base_ht / max(sum(item['quantite'] for item in items), 1),
+                            'churn_indicator': 0,  # Placeholder, calculate actual churn
+                            'total_spending_last_3_months': base_ht,  # Placeholder for recent spending
+                            'large_purchase': int(base_ht > 5000),
+                            'frequent_low_selling_purchase': 0  # Placeholder, calculate if needed
+                        }
 
-                    # Generate PDF
-                    try:
-                        pdf_data = generate_quote_base64(session['data']['nom_entreprise'], items)
-                    except Exception as pdf_error:
-                        logging.error(f"Error generating PDF: {pdf_error}")
-                        return jsonify({"response": "Une erreur est survenue lors de la génération du devis."})
+                        new_status = predict_status(features)
 
-                    # Keep session intact until the user confirms
-                    response = (f"Merci ! Vos informations ont été enregistrées. "
-                                f"Le montant total est {base_ht} EUR, avec {montant_taxes} EUR de taxes. Votre devis est prêt.")
-                    return jsonify({"response": response, "pdf_data": pdf_data, "pdf_filename": "devis_rempli.pdf"})
+                        # Log status change if there's a difference
+                        if old_status != new_status:
+                            log_status_change(client_name, old_status, new_status, "Order finalized")
+                            cursor.execute(
+                                """
+                                UPDATE informations_client
+                                SET status = %s
+                                WHERE nom_client = %s
+                                """,
+                                (new_status, client_name)
+                            )
 
-                # Handle manual product input
-                match = re.match(r"(\d+)\s+([A-Za-z0-9-/]+)", user_input)
-                if match:
-                    quantity, reference = match.groups()
-                    reference = reference.strip()
+                    conn.commit()  # Commit all changes
+                    logging.info("Products and status stored successfully for this session.")
 
-                    # Fetch product designation and price from the database
-                    logging.info(f"Looking up product with reference: {reference}")
-                    cursor.execute("SELECT designation, prix_achat FROM new_product WHERE ref ILIKE %s", (reference,))
-                    product = cursor.fetchone()
-                    logging.info(f"Query result: {product}")
+                    # Generate the quote and save its path
+                    pdf_data, preview_image, pdf_path = generate_quote_base64(
+                        session['data']['nom_entreprise'], items, archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+                    )
+                    session['data']['pdf_path'] = pdf_path
 
-                    if not product:
-                        # Suggest alternatives if no exact match found
-                        cursor.execute("SELECT ref FROM new_product WHERE ref ILIKE %s", (f"%{reference}%",))
-                        suggestions = cursor.fetchall()
-                        if suggestions:
-                            return jsonify({"response": f"Produit introuvable. Suggestions : {', '.join(s[0] for s in suggestions)}"})
-                        else:
-                            return jsonify({"response": f"Produit avec référence '{reference}' introuvable dans la base de données."})
-
-                    designation, prix_achat = product
-                    total_produit = round(int(quantity) * float(prix_achat), 2)
-
-                    # Add product details to session data
-                    session['data']['products'].append({
-                        "reference": reference,
-                        "description": designation,  # Ensure description is added
-                        "quantite": int(quantity),
-                        "prix_unitaire": float(prix_achat),
-                        "total_produit": total_produit
+                    session['step'] = 8
+                    return jsonify({
+                        "response": (
+                            get_variable_response("summary").format(
+                                base_ht=base_ht, montant_taxes=montant_taxes, net_a_payer=net_a_payer
+                            )
+                            + " Répondez par 'modifier' pour apporter des modifications ou 'envoyer' pour l'envoyer par e-mail."
+                        ),
+                        "preview_image": f"data:image/jpeg;base64,{preview_image}",
+                        "pdf_data": pdf_data,
+                        "pdf_filename": "devis_rempli.pdf"
                     })
 
-                    # Save session
-                    session.modified = True
-                    logging.info(f"Updated session products: {session['data']['products']}")
+                except Exception as e:
+                    conn.rollback()  # Rollback transaction in case of an error
+                    logging.error(f"Error saving data: {e}", exc_info=True)
+                    return jsonify({"response": "Une erreur est survenue lors de l'enregistrement des données."})
 
-                    response = f"Produit '{designation}' ajouté ! Ajoutez un autre produit ou tapez 'non' pour terminer."
-                    return jsonify({"response": response})
+            else:
+                # Match and process multiple product entries
+                lines = user_input.split('\n')  # Split the input by new lines
+                for line in lines:
+                    match = re.match(r"(\d+)\s+([A-Za-z0-9-/]+)", line.strip())  # Process each line
+                    if match:
+                        quantity, reference = match.groups()
+                        try:
+                            cursor.execute("SELECT designation, prix_achat FROM new_product WHERE ref ILIKE %s", (reference,))
+                            product = cursor.fetchone()
 
+                            if not product:
+                                logging.warning(f"Produit introuvable: Référence '{reference}' non trouvée.")
+                                return jsonify({"response": f"Produit introuvable. Référence '{reference}' non trouvée."})
+
+                            designation, prix_achat = product
+                            total_produit = round(int(quantity) * float(prix_achat), 2)
+
+                            # Check if the product is already in the session's product list
+                            existing_product = next(
+                                (prod for prod in session['data']['products'] if prod['reference'] == reference), None
+                            )
+
+                            if existing_product:
+                                # Update the existing product's quantity and total in session
+                                existing_product['quantite'] += int(quantity)
+                                existing_product['total_produit'] = round(existing_product['quantite'] * existing_product['prix_unitaire'], 2)
+                            else:
+                                # Add the new product to the session's product list
+                                session['data']['products'].append({
+                                    "reference": reference,
+                                    "description": designation,
+                                    "quantite": int(quantity),
+                                    "prix_unitaire": float(prix_achat),
+                                    "total_produit": total_produit
+                                })
+
+                            session.modified = True
+                            logging.info(f"Produit '{designation}' ajouté ou mis à jour pour référence '{reference}'.")
+
+                        except Exception as e:
+                            conn.rollback()  # Rollback transaction in case of an error
+                            logging.error(f"Error processing product '{reference}': {e}", exc_info=True)
+                            return jsonify({"response": f"Une erreur est survenue lors du traitement du produit '{reference}'."})
+                    else:
+                        logging.warning(f"Ligne ignorée en raison du format invalide : {line.strip()}")
+                        return jsonify({"response": f"Format invalide. Veuillez suivre l'exemple : '3 TUY6169'."})
+
+                return jsonify({"response": "Tous les produits valides ont été ajoutés ou mis à jour. Tapez 'non' pour terminer ou 'oui' pour ajouter d'autres produits."})
+
+        elif step == 8:
+            action, params = detect_action(user_input)
+
+            if action == 'modifier':
+                session['step'] = 9
+                return jsonify({"response": "Quelles modifications souhaitez-vous apporter ? Vous pouvez ajouter, supprimer ou modifier des produits."})
+
+            elif action == 'envoyer':
+                pdf_path = session['data'].get('pdf_path')
+                if not pdf_path or not os.path.exists(pdf_path):
+                    return jsonify({"response": "Aucun devis généré à envoyer. Veuillez réessayer."})
+                
+                try:
+                    items = session['data']['products']
+                    base_ht = sum(item['total_produit'] for item in items)
+                    montant_taxes = round(base_ht * 0.2, 2)
+                    net_a_payer = round(base_ht + montant_taxes, 2)
+
+                    query_update_totals = """
+                        UPDATE informations
+                        SET total_commande = %s, montant_taxes = %s, net_a_payer = %s
+                        WHERE nom_entreprise = %s AND nom_user = %s
+                    """
+                    cursor.execute(
+                        query_update_totals,
+                        (base_ht, montant_taxes, net_a_payer, session['data']['nom_entreprise'], session['data']['nom_user'])
+                    )
+
+                    conn.commit()
+                    recipient_email = session['data'].get('email', 'default_client_email@example.com')
+                    with open(pdf_path, "rb") as pdf_file:
+                        pdf_data = pdf_file.read()
+
+                    email_sent = send_email(
+                        recipient=recipient_email,
+                        subject="Votre devis",
+                        pdf_data=pdf_data,
+                        client_name=session['data']['nom_entreprise']
+                    )
+                    if email_sent:
+                        return jsonify({"response": f"Devis envoyé avec succès à {recipient_email}."})
+                    else:
+                        return jsonify({"response": "Une erreur est survenue lors de l'envoi de l'e-mail."})
+
+                except Exception as e:
+                    conn.rollback()
+                    logging.error(f"Error updating database or sending email: {e}", exc_info=True)
+                    return jsonify({"response": "Une erreur est survenue lors de la mise à jour des données ou de l'envoi de l'e-mail."})
+
+            else:
+                return jsonify({"response": "Action non reconnue. Essayez 'modifier' ou 'envoyer'."})
+
+        # Step 9
+        elif step == 9:
+            action, params = detect_action(user_input)
+
+            if action == 'ajouter':
+                match = re.match(r"(\d+)\s+([A-Za-z0-9-/]+)", params)
+                if match:
+                    quantity, reference = match.groups()
+                    return add_product(quantity, reference, session, cursor, conn)
                 else:
-                    response = "Format invalide. Veuillez entrer les produits sous la forme 'quantité référence'."
-                    return jsonify({"response": response})
+                    return jsonify({"response": "Format invalide. Utilisez 'ajouter <quantité> <référence>' pour ajouter un produit."})
 
-            except Exception as e:
-                logging.error(f"Error in step 5: {e}", exc_info=True)
-                return jsonify({"response": "Une erreur est survenue. Veuillez réessayer."})
+            elif action == 'modifier':
+                match = re.match(r"(\d+)\s+([A-Za-z0-9-/]+)", params)
+                if match:
+                    quantity, reference = match.groups()
+                    return update_product(quantity, reference, session, cursor, conn)
+                else:
+                    return jsonify({"response": "Format invalide. Utilisez 'modifier <quantité> <référence>' pour modifier un produit."})
+
+            elif action == 'supprimer':
+                match = re.match(r"([A-Za-z0-9-/]+)", params)
+                if match:
+                    reference = match.group(1)
+                    return remove_product(reference, session, cursor, conn)
+                else:
+                    return jsonify({"response": "Format invalide. Utilisez 'supprimer <référence>' pour supprimer un produit."})
+
+            else:
+                return jsonify({"response": "Action non reconnue. Utilisez 'ajouter', 'modifier', ou 'supprimer'."})
 
     except Exception as e:
         logging.error(f"Error in /chat endpoint: {e}", exc_info=True)
-        return jsonify({"response": "Une erreur est survenue. Veuillez réessayer plus tard."})
-
-def generate_quote_base64(client_name, items, output_file="quote.pdf"):
+    return jsonify({"response": "Une erreur est survenue. Veuillez réessayer plus tard."})
+def generate_quote_base64(client_name, items, archive_folder="C:\\Users\\LENOVO\\new\\archives_devis", output_file=None):
     try:
-        # Debug logging for items and client data
-        logging.info(f"Generating PDF for client: {client_name}")
-        logging.info(f"Items data: {items}")
-
-        # Ensure all items have the necessary keys
-        for item in items:
-            item.setdefault('prix_brut', 0.0)
-            item.setdefault('coulee', 'N/A')
-
-        # Load the HTML template
+        # Initialize the Jinja2 template rendering
         env = Environment(loader=FileSystemLoader("templates"))
         template = env.get_template("quote_template.html")
         current_date = datetime.now().strftime('%d/%m/%Y')
 
-        # Render the template with the provided data
+        # Render the HTML content for the PDF
         html_content = template.render(
             client_name=client_name,
             client_address=session['data']['adresse_entreprise'],
             client_tva=session['data']['n_tva'],
-            items=items,  # Contains 'produit' (designation)
+            items=items,
             base_ht=session['data'].get('base_ht', 0),
             montant_taxes=session['data'].get('montant_taxes', 0),
             net_a_payer=session['data'].get('net_a_payer', 0),
             date=current_date
         )
-        with open("debug_quote.html", "w", encoding="utf-8") as f:
-                    f.write(html_content)
-        logging.info("HTML content saved to debug_quote.html")
-        logging.info(f"Items passed to template: {items}")
 
-        logging.info(f"Generated HTML content for PDF:\n{html_content}")
+        # Ensure the archive folder exists
+        os.makedirs(archive_folder, exist_ok=True)
 
-        # Save the rendered HTML to a file for debugging
-        with open("debug_quote.html", "w", encoding="utf-8") as f:
-            f.write(html_content)
-        logging.info("HTML content saved to debug_quote.html")
+        # Generate a unique filename for the PDF if not provided
+        if not output_file:
+            timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            sanitized_client_name = re.sub(r"[^\w\-_\.]", "_", client_name)
+            output_file = os.path.join(archive_folder, f"devis_{sanitized_client_name}_{timestamp}.pdf")
 
-        # Ensure all paths (e.g., images) are correct
+        # Set wkhtmltopdf configuration
+        config = pdfkit.configuration(wkhtmltopdf=r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe')
         options = {
-            'enable-local-file-access': '',  # Required for local images
-            'quiet': ''  # Suppress verbose output
+            'enable-local-file-access': '',
+            'quiet': ''
         }
 
-        # Generate the PDF
-        pdfkit.from_string(html_content, output_file, options=options)
-        logging.info(f"PDF successfully generated at {output_file}")
+        # Generate the PDF and save it
+        pdfkit.from_string(html_content, output_file, options=options, configuration=config)
 
-        # Encode PDF to base64
+        # Convert the first page of the PDF into an image for preview
+        images = convert_from_path(output_file, dpi=150, first_page=1, last_page=1)
+        preview_image_path = os.path.join(archive_folder, f"preview_{sanitized_client_name}_{timestamp}.jpg")
+        images[0].save(preview_image_path, "JPEG")
+
+        # Encode the preview image to Base64 for response
+        with open(preview_image_path, "rb") as img_file:
+            base64_image = base64.b64encode(img_file.read()).decode("utf-8")
+
+        # Encode the PDF to Base64 for response
         with open(output_file, "rb") as pdf_file:
             base64_pdf = base64.b64encode(pdf_file.read()).decode("utf-8")
 
-        return base64_pdf
-
+        return base64_pdf, base64_image, output_file  # Return the path of the saved PDF
     except Exception as e:
-        logging.error(f"Error generating PDF: {e}", exc_info=True)
-        raise RuntimeError(f"Failed to generate PDF: {e}")
+        logging.error(f"Error generating PDF or image: {e}", exc_info=True)
+        raise RuntimeError(f"Failed to generate PDF or image: {e}")
 
 if __name__ == '__main__':
     app.run(debug=False)

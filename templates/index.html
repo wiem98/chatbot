@@ -336,28 +336,45 @@
         }
 
         function displayResponse(data) {
-            const chatBox = document.getElementById("chat-box");
-            const botResponse = data.response || "Error in response.";
-            appendMessage(botResponse, "bot");
+        const chatBox = document.getElementById("chat-box");
+        const botResponse = data.response || "Error in response.";
+        appendMessage(botResponse, "bot");
 
-            if (data.pdf_data) {
-                const pdfBlob = base64ToBlob(data.pdf_data, 'application/pdf');
-                const pdfUrl = URL.createObjectURL(pdfBlob);
+        // Display preview image if available
+        if (data.preview_image) {
+            const previewDiv = document.createElement("div");
+            previewDiv.className = "message bot";
 
-                const pdfLinkDiv = document.createElement("div");
-                pdfLinkDiv.className = "message bot";
-                const pdfLink = document.createElement("a");
-                pdfLink.href = pdfUrl;
-                pdfLink.download = data.pdf_filename || "document.pdf";
-                pdfLink.textContent = "📄 Download Devis (PDF)";
-                pdfLink.target = "_blank";
+            const previewImage = document.createElement("img");
+            previewImage.src = data.preview_image;
+            previewImage.alt = "Devis Preview";
+            previewImage.style.maxWidth = "100%";
+            previewImage.style.borderRadius = "10px";
 
-                pdfLinkDiv.appendChild(pdfLink);
-                chatBox.appendChild(pdfLinkDiv);
-            }
-
-            chatBox.scrollTop = chatBox.scrollHeight;
+            previewDiv.appendChild(previewImage);
+            chatBox.appendChild(previewDiv);
         }
+
+        // Display download link for PDF if available
+        if (data.pdf_data) {
+            const pdfBlob = base64ToBlob(data.pdf_data, 'application/pdf');
+            const pdfUrl = URL.createObjectURL(pdfBlob);
+
+            const pdfLinkDiv = document.createElement("div");
+            pdfLinkDiv.className = "message bot";
+
+            const pdfLink = document.createElement("a");
+            pdfLink.href = pdfUrl;
+            pdfLink.download = data.pdf_filename || "document.pdf";
+            pdfLink.textContent = "📄 Download Devis (PDF)";
+            pdfLink.target = "_blank";
+
+            pdfLinkDiv.appendChild(pdfLink);
+            chatBox.appendChild(pdfLinkDiv);
+        }
+
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
 
         function appendMessage(message, sender) {
             const chatBox = document.getElementById("chat-box");
