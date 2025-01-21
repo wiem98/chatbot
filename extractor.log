@@ -1,0 +1,82 @@
+2025-01-09 13:15:32,583 - INFO - Text and tables extracted successfully from C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf.
+2025-01-09 13:15:32,583 - INFO - Raw extracted text: Page 1
+2025-01-09 13:15:32,583 - INFO - Normalized text: Page 1
+2025-01-09 13:15:32,583 - INFO - Final extracted items: {'text': "Demande de Devis\nSociété: ABC Industries SARL\nAdresse: 123 Rue de l'Innovation, 75001 Paris, France\nContact: contact@abc-industries.fr | +33 1 23 45 67 89\nMonsieur/Madame,\nNous vous prions de bien vouloir nous transmettre un devis pour les articles suivants, nécessaires à\nla réalisation de notre projet en cours:\n- Deux unités de UNION PASSE CLOISON INOX 3/8 DOUBLE BAGUE.\n- Cinq unités de ECROU INOX 6MM.\n- Trois unités de ECROU INOX 6MM.\nVeuillez inclure dans votre réponse les informations relatives aux délais de livraison et aux modalités\nde paiement.\nDans l'attente de votre retour, veuillez agréer, Monsieur/Madame, l'expression de nos salutations\ndistinguées.\nCordialement,\nL'équipe Technique\nPage 1\n", 'tables': []}
+2025-01-09 13:15:32,584 - INFO - Processing line: Demande de Devis
+2025-01-09 13:15:32,585 - INFO - Address extracted: Demande de Devis
+2025-01-09 13:15:32,585 - INFO - Processing line: Société: ABC Industries SARL
+2025-01-09 13:15:32,585 - INFO - Company name extracted: ABC Industries SARL
+2025-01-09 13:15:32,585 - INFO - Processing line: Adresse: 123 Rue de l'Innovation, 75001 Paris, France
+2025-01-09 13:15:32,585 - INFO - Processing line: Contact: contact@abc-industries.fr | +33 1 23 45 67 89
+2025-01-09 13:15:32,585 - INFO - Processing line: Monsieur/Madame,
+2025-01-09 13:15:32,585 - INFO - Processing line: Nous vous prions de bien vouloir nous transmettre un devis pour les articles suivants, nécessaires à
+2025-01-09 13:15:32,586 - INFO - Processing line: la réalisation de notre projet en cours:
+2025-01-09 13:15:32,586 - INFO - Processing line: - Deux unités de UNION PASSE CLOISON INOX 3/8 DOUBLE BAGUE.
+2025-01-09 13:15:32,586 - INFO - Detected product line: Deux unités de UNION PASSE CLOISON INOX 3/8 DOUBLE BAGUE.
+2025-01-09 13:15:32,587 - INFO - Extracted quantity: 2
+2025-01-09 13:15:32,596 - INFO - Processing line: - Cinq unités de ECROU INOX 6MM.
+2025-01-09 13:15:32,596 - INFO - Detected product line: Cinq unités de ECROU INOX 6MM.
+2025-01-09 13:15:32,596 - INFO - Extracted quantity: 5
+2025-01-09 13:15:32,603 - INFO - Processing line: - Trois unités de ECROU INOX 6MM.
+2025-01-09 13:15:32,603 - INFO - Detected product line: Trois unités de ECROU INOX 6MM.
+2025-01-09 13:15:32,603 - INFO - Extracted quantity: 3
+2025-01-09 13:15:32,609 - INFO - Processing line: Veuillez inclure dans votre réponse les informations relatives aux délais de livraison et aux modalités
+2025-01-09 13:15:32,609 - INFO - Processing line: de paiement.
+2025-01-09 13:15:32,610 - INFO - Processing line: Dans l'attente de votre retour, veuillez agréer, Monsieur/Madame, l'expression de nos salutations
+2025-01-09 13:15:32,610 - INFO - Processing line: distinguées.
+2025-01-09 13:15:32,610 - INFO - Processing line: Cordialement,
+2025-01-09 13:15:32,610 - INFO - Processing line: L'équipe Technique
+2025-01-09 13:15:32,610 - INFO - Processing line: Page 1
+2025-01-09 13:15:32,610 - INFO - Processing line: 
+2025-01-09 13:15:32,610 - INFO - Extracted 3 items: [{'reference': 'UNPA-1-4-1/4', 'description': 'UNION PASSE CLOISON INOX 1/4" DOUBLE BAGUE', 'quantity': 2}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 5}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 3}]
+2025-01-09 13:15:32,610 - INFO - Analysis complete for C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf.
+2025-01-09 13:15:32,610 - INFO - Extracted Items: [{'reference': 'UNPA-1-4-1/4', 'description': 'UNION PASSE CLOISON INOX 1/4" DOUBLE BAGUE', 'quantity': 2}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 5}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 3}]
+2025-01-09 13:15:32,610 - INFO - Extracted Address: Demande de Devis
+2025-01-09 13:15:32,610 - INFO - Extracted Company Name: ABC Industries SARL
+2025-01-09 13:15:32,610 - INFO - Extracted Tables: []
+2025-01-09 13:15:32,610 - INFO - Extracted Text Fields for C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf:
+2025-01-09 13:15:32,610 - INFO - {'items': [{'reference': 'UNPA-1-4-1/4', 'description': 'UNION PASSE CLOISON INOX 1/4" DOUBLE BAGUE', 'quantity': 2}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 5}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 3}], 'address': 'Demande de Devis', 'company_name': 'ABC Industries SARL'}
+2025-01-09 13:15:32,611 - INFO - 
+Extracted Tables for C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf:
+2025-01-09 13:15:32,611 - INFO - []
+2025-01-10 11:38:27,796 - INFO - Text and tables extracted successfully from C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf.
+2025-01-10 11:38:27,797 - INFO - Raw extracted text: Page 1
+2025-01-10 11:38:27,797 - INFO - Normalized text: Page 1
+2025-01-10 11:38:27,797 - INFO - Final extracted items: {'text': "Demande de Devis\nSociété: ABC Industries SARL\nAdresse: 123 Rue de l'Innovation, 75001 Paris, France\nContact: contact@abc-industries.fr | +33 1 23 45 67 89\nMonsieur/Madame,\nNous vous prions de bien vouloir nous transmettre un devis pour les articles suivants, nécessaires à\nla réalisation de notre projet en cours:\n- Deux unités de UNION PASSE CLOISON INOX 3/8 DOUBLE BAGUE.\n- Cinq unités de ECROU INOX 6MM.\n- Trois unités de ECROU INOX 6MM.\nVeuillez inclure dans votre réponse les informations relatives aux délais de livraison et aux modalités\nde paiement.\nDans l'attente de votre retour, veuillez agréer, Monsieur/Madame, l'expression de nos salutations\ndistinguées.\nCordialement,\nL'équipe Technique\nPage 1\n", 'tables': []}
+2025-01-10 11:38:27,797 - INFO - Processing line: Demande de Devis
+2025-01-10 11:38:27,798 - INFO - Address extracted: Demande de Devis
+2025-01-10 11:38:27,799 - INFO - Processing line: Société: ABC Industries SARL
+2025-01-10 11:38:27,799 - INFO - Company name extracted: ABC Industries SARL
+2025-01-10 11:38:27,799 - INFO - Processing line: Adresse: 123 Rue de l'Innovation, 75001 Paris, France
+2025-01-10 11:38:27,800 - INFO - Processing line: Contact: contact@abc-industries.fr | +33 1 23 45 67 89
+2025-01-10 11:38:27,800 - INFO - Processing line: Monsieur/Madame,
+2025-01-10 11:38:27,800 - INFO - Processing line: Nous vous prions de bien vouloir nous transmettre un devis pour les articles suivants, nécessaires à
+2025-01-10 11:38:27,800 - INFO - Processing line: la réalisation de notre projet en cours:
+2025-01-10 11:38:27,800 - INFO - Processing line: - Deux unités de UNION PASSE CLOISON INOX 3/8 DOUBLE BAGUE.
+2025-01-10 11:38:27,800 - INFO - Detected product line: Deux unités de UNION PASSE CLOISON INOX 3/8 DOUBLE BAGUE.
+2025-01-10 11:38:27,801 - INFO - Extracted quantity: 2
+2025-01-10 11:38:27,822 - INFO - Processing line: - Cinq unités de ECROU INOX 6MM.
+2025-01-10 11:38:27,822 - INFO - Detected product line: Cinq unités de ECROU INOX 6MM.
+2025-01-10 11:38:27,822 - INFO - Extracted quantity: 5
+2025-01-10 11:38:27,832 - INFO - Processing line: - Trois unités de ECROU INOX 6MM.
+2025-01-10 11:38:27,832 - INFO - Detected product line: Trois unités de ECROU INOX 6MM.
+2025-01-10 11:38:27,832 - INFO - Extracted quantity: 3
+2025-01-10 11:38:27,840 - INFO - Processing line: Veuillez inclure dans votre réponse les informations relatives aux délais de livraison et aux modalités
+2025-01-10 11:38:27,840 - INFO - Processing line: de paiement.
+2025-01-10 11:38:27,840 - INFO - Processing line: Dans l'attente de votre retour, veuillez agréer, Monsieur/Madame, l'expression de nos salutations
+2025-01-10 11:38:27,840 - INFO - Processing line: distinguées.
+2025-01-10 11:38:27,840 - INFO - Processing line: Cordialement,
+2025-01-10 11:38:27,840 - INFO - Processing line: L'équipe Technique
+2025-01-10 11:38:27,840 - INFO - Processing line: Page 1
+2025-01-10 11:38:27,840 - INFO - Processing line: 
+2025-01-10 11:38:27,841 - INFO - Extracted 3 items: [{'reference': 'UNPA-1-4-1/4', 'description': 'UNION PASSE CLOISON INOX 1/4" DOUBLE BAGUE', 'quantity': 2}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 5}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 3}]
+2025-01-10 11:38:27,841 - INFO - Analysis complete for C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf.
+2025-01-10 11:38:27,841 - INFO - Extracted Items: [{'reference': 'UNPA-1-4-1/4', 'description': 'UNION PASSE CLOISON INOX 1/4" DOUBLE BAGUE', 'quantity': 2}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 5}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 3}]
+2025-01-10 11:38:27,841 - INFO - Extracted Address: Demande de Devis
+2025-01-10 11:38:27,841 - INFO - Extracted Company Name: ABC Industries SARL
+2025-01-10 11:38:27,841 - INFO - Extracted Tables: []
+2025-01-10 11:38:27,841 - INFO - Extracted Text Fields for C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf:
+2025-01-10 11:38:27,841 - INFO - {'items': [{'reference': 'UNPA-1-4-1/4', 'description': 'UNION PASSE CLOISON INOX 1/4" DOUBLE BAGUE', 'quantity': 2}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 5}, {'reference': 'ECIN-6', 'description': 'ECROU INOX 6MM', 'quantity': 3}], 'address': 'Demande de Devis', 'company_name': 'ABC Industries SARL'}
+2025-01-10 11:38:27,841 - INFO - 
+Extracted Tables for C:\Users\LENOVO\Downloads\demande_devis_with_company_info1.pdf:
+2025-01-10 11:38:27,841 - INFO - []

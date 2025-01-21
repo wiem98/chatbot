@@ -29,6 +29,40 @@
             background-color: #181818;
             color: #f4f4f8;
         }
+        table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 10px;
+        font-size: 9px; /* Adjust font size for clarity */
+        }
+
+        th, td {
+        border: 1px solid #ddd;
+        padding: 6px 10px; /* Reduce padding for compactness */
+        text-align: left;
+        vertical-align: middle; /* Ensure content stays vertically centered */
+        }
+
+        th {
+        background-color: #007bff; /* Use a distinct header color */
+        color: black; /* White text for contrast */
+        font-weight: bold;
+        }
+
+        tr:nth-child(even) {
+        background-color: #f9f9f9; /* Add alternating row colors for readability */
+        }
+
+        tr:hover {
+        background-color: #f1f1f1; /* Highlight row on hover for better interaction */
+        }
+
+        table {
+        border-radius: 8px; /* Add rounded corners for a modern look */
+        overflow: hidden; /* Ensure content stays within rounded edges */
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+        }
+
 
         /* Chat Container */
         #chat-container {
@@ -339,6 +373,53 @@
         const chatBox = document.getElementById("chat-box");
         const botResponse = data.response || "Error in response.";
         appendMessage(botResponse, "bot");
+        if (data.product_list && Array.isArray(data.product_list)) {
+            const tableDiv = document.createElement("div");
+            tableDiv.className = "message bot";
+
+            const table = document.createElement("table");
+            table.style.width = "100%";
+            table.style.borderCollapse = "collapse";
+            table.style.marginTop = "10px";
+
+            // Add table header
+            const headerRow = document.createElement("tr");
+            ["Reference", "Designation"].forEach(headerText => {
+                const th = document.createElement("th");
+                th.textContent = headerText;
+                th.style.border = "1px solid #ccc";
+                th.style.padding = "8px";
+                th.style.backgroundColor = "#f2f2f2";
+                th.style.textAlign = "left";
+                headerRow.appendChild(th);
+            });
+            table.appendChild(headerRow);
+
+            // Add table rows for each product
+            data.product_list.forEach(product => {
+                const row = document.createElement("tr");
+
+                const refCell = document.createElement("td");
+                refCell.textContent = product.ref;
+                refCell.style.border = "1px solid #ccc";
+                refCell.style.padding = "8px";
+                row.appendChild(refCell);
+
+                const designationCell = document.createElement("td");
+                designationCell.textContent = product.designation;
+                designationCell.style.border = "1px solid #ccc";
+                designationCell.style.padding = "8px";
+                row.appendChild(designationCell);
+
+                table.appendChild(row);
+            });
+
+            tableDiv.appendChild(table);
+            chatBox.appendChild(tableDiv);
+        }
+
+        chatBox.scrollTop = chatBox.scrollHeight;
+
 
         // Display preview image if available
         if (data.preview_image) {

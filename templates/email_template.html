@@ -15,8 +15,10 @@
         <h1>Votre devis</h1>
     </div>
     <div class="content">
-        <p>Bonjour,</p>
-        <p>Veuillez trouver ci-joint votre devis. Nous restons à votre disposition pour toute question ou assistance.</p>
+        <p>Bonjour {{ client_name }},</p>
+        <p>Veuillez trouver ci-joint votre devis intitulé : <strong>{{ pdf_filename }}</strong>.</p>
+        <p>Le fichier est attaché à cet e-mail. Vous pouvez le télécharger directement depuis les pièces jointes.</p>
+        <p>Nous restons à votre disposition pour toute question ou assistance.</p>
         <p>Merci de votre confiance.</p>
     </div>
     <div class="footer">

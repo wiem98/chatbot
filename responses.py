@@ -39,11 +39,12 @@ def get_variable_response(step):
             "Pour finaliser vos informations, indiquez votre nom complet. Exemple : 'Elise Martin'."
         ],
         "ask_products": [
-            "Merci. Indiquez les quantités et les références ou noms des produits. Exemple : '5 TUY6169 2 Aluminium'.",
-            "Parfait ! Ajoutez les produits en précisant les quantités et les références. Exemple : '3 TUY6169'.",
-            "Très bien. Tapez les produits avec les quantités et références. Exemple : '2 PRO1234 4 Steel Pipe'.",
-            "Vous pouvez ajouter plusieurs produits en une seule fois. Exemple : '10 TUY1234 5 PLA5678'."
+            "Merci de l'information. Veuillez indiquer les produits avec leurs quantités en écrivant chaque produit sur une nouvelle ligne. Exemple :\n1 TUY6169\n2 Aluminium",
+            "Parfait ! Ajoutez les produits avec les quantités et les références, un produit par ligne. Exemple :\n3 TUY6169",
+            "Très bien, indiquez les produits en précisant la quantité et la référence. Chaque produit doit être écrit sur une nouvelle ligne. Exemple :\n2 PRO1234\n4 Steel Pipe",
+            "Vous pouvez ajouter plusieurs produits à la fois. Merci d'écrire chaque produit avec sa quantité et sa référence sur une ligne distincte. Exemple :\n10 TUY1234\n5 PLA5678"
         ],
+
         "invalid_product_format": [
             "Format invalide. Veuillez entrer les produits sous la forme 'quantité référence'. Exemple : '5 TUY6169'.",
             "Désolé, je n'ai pas compris. Essayez de taper : '3 Aluminium'.",
