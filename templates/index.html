@@ -12,6 +12,64 @@
             padding: 0;
             font-family: Arial, sans-serif;
         }
+        /* Modal Styles */
+        /* Modal Styles */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.85); /* Darker overlay for clarity */
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-in-out; /* Smooth fade-in animation */
+        }
+
+        .modal img {
+            max-width: 100%;  /* Ensure image scales proportionally */
+            max-height: 90%;  /* Limit to viewport height */
+            border-radius: 10px;
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.8); /* Add shadow for better contrast */
+            image-rendering: auto;  /* Use browser's best rendering */
+            image-rendering: crisp-edges; /* Try this for sharp lines in some browsers */
+        }
+
+        .modal.active {
+            display: flex; /* Show modal */
+        }
+
+        /* Close Button */
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 24px;
+            color: white;
+            background: none;
+            border: none;
+            cursor: pointer;
+            z-index: 1001;
+            transition: transform 0.3s;
+        }
+
+        .modal-close:hover {
+            transform: scale(1.2); /* Enlarge the close button on hover */
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes zoomIn {
+            from { transform: scale(0.8); }
+            to { transform: scale(1); }
+        }
+
 
         /* Adjust body styling */
         body {
@@ -254,6 +312,10 @@
             <button id="upload-button" onclick="triggerFileInput()">Upload File</button>
             <input type="file" id="file-input" onchange="handleFileUpload(event)">
         </div>
+        <div id="preview-modal" class="modal">
+            <button class="modal-close" onclick="closeModal()">✖</button>
+            <img id="modal-image" src="" alt="Preview">
+        </div>        
     </div>
 
     <script>
@@ -266,6 +328,21 @@
         function toggleTheme() {
             document.body.classList.toggle("dark-mode");
         }
+        // preview
+        function showModal(imageSrc) {
+            const modal = document.getElementById("preview-modal");
+            const modalImage = document.getElementById("modal-image");
+
+            modalImage.src = imageSrc; // Set the modal image source
+            modal.classList.add("active"); // Show the modal
+        }
+
+        // Close the modal when clicked outside the image or on the close button
+        function closeModal() {
+            const modal = document.getElementById("preview-modal");
+            modal.classList.remove("active"); // Hide the modal
+        }
+
 
         // Typing Indicator
         function showTypingIndicator() {
@@ -373,6 +450,22 @@
         const chatBox = document.getElementById("chat-box");
         const botResponse = data.response || "Error in response.";
         appendMessage(botResponse, "bot");
+        if (data.preview_image) {
+                const previewDiv = document.createElement("div");
+                previewDiv.className = "message bot";
+
+                const previewImage = document.createElement("img");
+                previewImage.src = data.preview_image;
+                previewImage.alt = "Devis Preview";
+                previewImage.style.maxWidth = "100%";
+                previewImage.style.borderRadius = "10px";
+                previewImage.style.cursor = "pointer"; // Add pointer cursor
+                previewImage.onclick = () => showModal(data.preview_image); // Open modal on click
+
+                previewDiv.appendChild(previewImage);
+                chatBox.appendChild(previewDiv);
+            }
+
         if (data.product_list && Array.isArray(data.product_list)) {
             const tableDiv = document.createElement("div");
             tableDiv.className = "message bot";
@@ -419,22 +512,6 @@
         }
 
         chatBox.scrollTop = chatBox.scrollHeight;
-
-
-        // Display preview image if available
-        if (data.preview_image) {
-            const previewDiv = document.createElement("div");
-            previewDiv.className = "message bot";
-
-            const previewImage = document.createElement("img");
-            previewImage.src = data.preview_image;
-            previewImage.alt = "Devis Preview";
-            previewImage.style.maxWidth = "100%";
-            previewImage.style.borderRadius = "10px";
-
-            previewDiv.appendChild(previewImage);
-            chatBox.appendChild(previewDiv);
-        }
 
         // Display download link for PDF if available
         if (data.pdf_data) {

@@ -883,25 +883,18 @@ def generate_quote_base64(client_name, items, archive_folder="C:\\Users\\LENOVO\
         pdfkit.from_string(html_content, output_file, options=options, configuration=config)
 
         # Convert the first page of the PDF into an image for preview
-        images = convert_from_path(output_file, dpi=150, first_page=1, last_page=1)
+        images = convert_from_path(output_file, dpi=300, first_page=1, last_page=1)  # Increase DPI to 300 or higher
         image = images[0]
 
-        # Enhance brightness, contrast, and sharpness
+        # Enhance brightness, contrast, and sharpness (optional)
         image = ImageEnhance.Brightness(image).enhance(1.2)
         image = ImageEnhance.Contrast(image).enhance(1.5)
         image = ImageEnhance.Sharpness(image).enhance(2.0)
 
-        # Add annotations
-        draw = ImageDraw.Draw(image)
-        font = ImageFont.truetype("arial.ttf", 20)
-        draw.text((10, 10), "Preview", fill="white", font=font)
-
-        # Resize for consistency
-        image = image.resize((800, 800))
-
-        # Save the enhanced image
+        # Save the enhanced image at higher resolution
         preview_image_path = os.path.join(archive_folder, f"preview_{sanitized_client_name}_{timestamp}.jpg")
-        image.save(preview_image_path, "JPEG", quality=85, optimize=True)
+        image.save(preview_image_path, "JPEG", quality=95, dpi=(300, 300))  # Save with high quality and DPI
+
         # Encode the preview image to Base64 for response
         with open(preview_image_path, "rb") as img_file:
             base64_image = base64.b64encode(img_file.read()).decode("utf-8")
