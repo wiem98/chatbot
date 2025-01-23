@@ -137,6 +137,65 @@ except Exception as e:
     logging.error(f"Failed to load the status prediction model: {e}")
     raise RuntimeError("Model loading failed.")
 # Helper functions
+def predict_status(features):
+    """
+    Predicts the client status using the pre-trained RandomForest model while enforcing specific rules:
+    - Allow transitions from 'nouveau' to 'normal'
+    - Allow transitions from 'normal' to 'VIP'
+    - Allow downgrades from 'VIP' to 'normal'
+    - Prevent any other status transitions by inferring current behavior patterns.
+
+    Parameters:
+        features (dict): Dictionary of client features for prediction.
+
+    Returns:
+        str: The new status based on prediction and rules.
+    """
+    try:
+        # Ensure feature format matches the model input
+        feature_vector = [
+            features['total_spending'],
+            features['total_quantity'],
+            features['recency'],
+            features['predicted_spending'],
+            features['avg_quantity'],
+            features['purchase_frequency'],
+            features['average_spending'],
+            features['churn_indicator'],
+            features['total_spending_last_3_months'],
+            features['large_purchase'],
+            features['frequent_low_selling_purchase']
+        ]
+        
+        # Predict the new status
+        prediction = status_model.predict([feature_vector])[0]
+        status_mapping = {0: 'nouveau', 1: 'normal', 2: 'VIP'}
+        predicted_status = status_mapping[prediction]
+
+        # Infer rules directly from features
+        # Example logic: Infer current status based on spending or other features
+        if features['total_spending'] < 100:
+            current_status = 'nouveau'
+        elif features['total_spending'] < 1000:
+            current_status = 'normal'
+        else:
+            current_status = 'VIP'
+
+        # Apply transition rules
+        if current_status == 'nouveau' and predicted_status == 'normal':
+            return 'normal'  # Upgrade from 'nouveau' to 'normal'
+        elif current_status == 'normal' and predicted_status == 'VIP':
+            return 'VIP'  # Upgrade from 'normal' to 'VIP'
+        elif current_status == 'VIP' and predicted_status == 'normal':
+            return 'normal'  # Downgrade from 'VIP' to 'normal'
+        else:
+            # If the transition doesn't match allowed rules, return the inferred status
+            return current_status
+
+    except Exception as e:
+        logging.error(f"Status prediction failed: {e}")
+        return "unknown"  # Return "unknown" in case of failure
+
 def log_status_change(client_name, old_status, new_status, reason):
     """
     Logs the status change of a client into the status_history table.
@@ -154,31 +213,6 @@ def log_status_change(client_name, old_status, new_status, reason):
     except Exception as e:
         logging.error(f"Failed to log status change for client '{client_name}': {e}", exc_info=True)
 
-def predict_status(features):
-    """
-    Predicts the client status using the pre-trained RandomForest model.
-    """
-    try:
-        # Ensure feature format matches the model input
-        feature_vector = [
-            features['total_spending'],
-            features['total_quantity'],
-            features['recency'],
-            features['predicted_spending'],
-            features['avg_quantity'],
-            features['purchase_frequency'],
-            features['average_spending'],
-            features['churn_indicator'],
-            features['total_spending_last_3_months'],
-            features['large_purchase'],
-            features['frequent_low_selling_purchase']
-        ]
-        prediction = status_model.predict([feature_vector])[0]
-        status_mapping = {0: 'nouveau', 1: 'normal', 2: 'VIP'}
-        return status_mapping[prediction]
-    except Exception as e:
-        logging.error(f"Status prediction failed: {e}")
-        return "unknown"
 def add_product(quantity, reference, session, cursor, conn):
     try:
         cursor.execute("SELECT designation, prix_achat FROM new_product WHERE ref ILIKE %s", (reference,))
@@ -338,6 +372,20 @@ def detect_action(user_input):
         action, params = match.groups()
         return action, params
     return None, None
+@app.route('/predict_price', methods=['POST'])
+def predict_price():
+    try:
+        data = request.json
+        features = [
+            data['prix_achat'], data['quantite'], data['stock'],
+            data['year'], data['month'], data.get('markup', 0)
+        ]
+        predicted_price = loaded_model.predict([features])[0]
+        return jsonify({"predicted_price": round(predicted_price, 2)})
+    except Exception as e:
+        logging.error(f"Error in prediction: {e}")
+        return jsonify({"error": "Failed to predict price."}), 500
+
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -469,7 +517,7 @@ def chat():
             if matches:
                 for quantity, reference in matches:
                     try:
-                        cursor.execute("SELECT designation, prix_achat FROM new_product WHERE ref ILIKE %s", (reference,))
+                        cursor.execute("SELECT designation, prix_achat, stock FROM new_product WHERE ref ILIKE %s", (reference,))
                         product = cursor.fetchone()
 
                         if not product:
@@ -477,8 +525,21 @@ def chat():
                             errors.append(f"Produit introuvable. Référence '{reference}' non trouvée.")
                             continue
 
-                        designation, prix_achat = product
-                        total_produit = round(int(quantity) * float(prix_achat), 2)
+                        designation, prix_achat, stock = product
+                        quantity = int(quantity)
+                        current_date = datetime.now()
+                        features = [
+                            prix_achat,              # `prix_achat`
+                            quantity,                # `quantite`
+                            stock,
+                            current_date.year,       # `year`
+                            current_date.month,      # `month`
+                            0.1                      # `markup` (default or calculated)
+                        ]
+
+                        # Predict the selling price
+                        predicted_price = loaded_model.predict([features])[0]
+                        total_produit = round(quantity * predicted_price, 2)
 
                         # Check if the product is already in the session's product list
                         existing_product = next(
@@ -493,7 +554,7 @@ def chat():
                                 "reference": reference,
                                 "description": designation,
                                 "quantite": int(quantity),
-                                "prix_unitaire": float(prix_achat),
+                                "prix_unitaire": round(predicted_price, 2),
                                 "total_produit": total_produit
                             })
 
@@ -792,16 +853,12 @@ def send_email(recipient, subject, pdf_path, client_name):
             html=html_content,
         )
 
-        # Attach the PDF to the email
         msg.attach(pdf_filename, "application/pdf", pdf_data)
 
-        # Log attachment success
         logging.info(f"PDF attached to the email: {pdf_filename}")
 
-        # Send the email
         mail.send(msg)
 
-        # Log email sent success
         logging.info(f"Email with PDF attachment ({pdf_filename}) sent to {recipient}.")
         return True
 
@@ -818,37 +875,30 @@ def load_counter():
         data = {"date": datetime.now().strftime('%Y-%m-%d'), "counter": 0}
     return data
 
-# Save counter to a file
 def save_counter(data):
     with open("quote_counter.json", "w") as f:
         json.dump(data, f)
 
-# Increment the counter and reset it if the date changes
 def get_quote_number():
     data = load_counter()
     current_date = datetime.now().strftime('%Y-%m-%d')
 
     if data["date"] != current_date:
-        # Reset the counter if it's a new day
         data = {"date": current_date, "counter": 1}
     else:
-        # Increment the counter
         data["counter"] += 1
 
     save_counter(data)
 
-    # Format the number as "0001", "0002", etc.
     return f'{data["counter"]:04d}'
 def generate_quote_base64(client_name, items, archive_folder="C:\\Users\\LENOVO\\new\\archives_devis", output_file=None):
     try:
-        # Initialize the Jinja2 template rendering
         env = Environment(loader=FileSystemLoader("templates"))
         template = env.get_template("quote_template.html")
         current_date = datetime.now().strftime('%d/%m/%Y')
         validation_date = (datetime.now() + timedelta(days=15)).strftime('%d/%m/%Y')
         quote_number = get_quote_number()
 
-        # Render the HTML content for the PDF
         html_content = template.render(
             client_name=client_name,
             client_address=session['data']['adresse_entreprise'],
@@ -863,35 +913,29 @@ def generate_quote_base64(client_name, items, archive_folder="C:\\Users\\LENOVO\
 
         )
 
-        # Ensure the archive folder exists
         os.makedirs(archive_folder, exist_ok=True)
 
-        # Generate a unique filename for the PDF if not provided
         if not output_file:
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             sanitized_client_name = re.sub(r"[^\w\-_\.]", "_", client_name)
             output_file = os.path.join(archive_folder, f"devis_{sanitized_client_name}_{timestamp}.pdf")
 
-        # Set wkhtmltopdf configuration
+        #  wkhtmltopdf configuration
         config = pdfkit.configuration(wkhtmltopdf=r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe')
         options = {
             'enable-local-file-access': '',
             'quiet': ''
         }
 
-        # Generate the PDF and save it
         pdfkit.from_string(html_content, output_file, options=options, configuration=config)
 
-        # Convert the first page of the PDF into an image for preview
         images = convert_from_path(output_file, dpi=300, first_page=1, last_page=1)  # Increase DPI to 300 or higher
         image = images[0]
 
-        # Enhance brightness, contrast, and sharpness (optional)
         image = ImageEnhance.Brightness(image).enhance(1.2)
         image = ImageEnhance.Contrast(image).enhance(1.5)
         image = ImageEnhance.Sharpness(image).enhance(2.0)
 
-        # Save the enhanced image at higher resolution
         preview_image_path = os.path.join(archive_folder, f"preview_{sanitized_client_name}_{timestamp}.jpg")
         image.save(preview_image_path, "JPEG", quality=95, dpi=(300, 300))  # Save with high quality and DPI
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enhanced Chatbot Interface</title>
+    <title>Devis Chatbot </title>
     <style>
         /* Basic Reset */
         * {
@@ -124,31 +124,32 @@
 
         /* Chat Container */
         #chat-container {
-            width: 100%;
-            max-width: 600px;
-            height: 90vh;
+            width: 90%;
+            max-width: 800px; /* Larger max width */
+            height: 80vh; /* Increase height */
             display: flex;
             flex-direction: column;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            background-color: #ffffff;
+            border-radius: 12px; /* Rounded corners */
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); /* Soft shadow */
             overflow: hidden;
+            margin: auto; /* Center the chatbox on the page */
         }
 
         body.dark-mode #chat-container {
             background-color: #252525;
         }
 
-        /* Chat Box */
         #chat-box {
             flex: 1;
             overflow-y: auto;
             padding: 20px;
-            background-color: #f9f9fb;
+            background-color: #f4f6f9;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 15px; /* More spacing between messages */
             scroll-behavior: smooth;
+            border-bottom: 1px solid #ddd; /* Subtle separator for the input section */
         }
 
         body.dark-mode #chat-box {
@@ -170,16 +171,22 @@
             background-color: #007bff;
             color: white;
             align-self: flex-end;
-            border-top-right-radius: 0;
-            text-align: right;
+            border-radius: 20px; /* Rounded bubble shape */
+            padding: 12px 18px; /* Increase padding for readability */
+            font-size: 14px;
+            max-width: 70%; /* Larger width for messages */
+            word-break: break-word;
         }
-
         /* Bot message styles */
         .message.bot {
-            background-color: #e5e5ea;
-            color: black;
+            background-color: #e8eaf3;
+            color: #333;
             align-self: flex-start;
-            border-top-left-radius: 0;
+            border-radius: 20px;
+            padding: 12px 18px;
+            font-size: 14px;
+            max-width: 70%;
+            word-break: break-word;
         }
 
         body.dark-mode .message.bot {
@@ -190,9 +197,12 @@
         /* Input Section */
         #input-section {
             display: flex;
-            padding: 15px;
-            border-top: 1px solid #ddd;
-            background-color: #fff;
+            align-items: center; /* Vertically align items */
+            padding: 15px; /* Add spacing */
+            background-color: #ffffff;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+            border-top: 1px solid #ddd; /* Border at the top for separation */
+            gap: 10px; /* Spacing between input and buttons */
         }
 
         body.dark-mode #input-section {
@@ -202,12 +212,17 @@
 
         /* Input Field */
         #user-input {
-            flex: 1;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 20px;
-            font-size: 14px;
+            flex: 1; /* Take up available space */
+            padding: 12px 16px; /* Add padding for better appearance */
+            border: 2px solid #ccc; /* Border for clarity */
+            border-radius: 25px; /* Rounded corners */
+            font-size: 16px; /* Larger font */
             outline: none;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease; /* Smooth transitions */
+        }
+        #user-input:focus {
+            border-color: #007bff; /* Highlighted border on focus */
+            box-shadow: 0 0 5px rgba(0, 123, 255, 0.5); /* Glow effect */
         }
 
         body.dark-mode #user-input {
@@ -218,19 +233,23 @@
 
         /* Send Button */
         #send-button {
-            margin-left: 10px;
-            padding: 10px 20px;
+            padding: 12px 20px; /* Make the button larger */
             background-color: #007bff;
             color: white;
             border: none;
-            border-radius: 20px;
+            border-radius: 25px; /* Rounded corners */
+            font-size: 16px; /* Larger font */
+            font-weight: bold;
             cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s;
+            display: flex;
+            align-items: center; /* Center text and icons */
+            gap: 8px; /* Space for an icon */
+            transition: background-color 0.3s ease, transform 0.2s;
         }
 
         #send-button:hover {
-            background-color: #0056b3;
+            background-color: #0056b3; /* Darker blue on hover */
+            transform: translateY(-2px); /* Slight lift effect */
         }
 
         /* Dark Mode Button */
@@ -281,25 +300,44 @@
             50% { opacity: 1; }
         }
         #upload-button {
-            margin-left: 10px;
-            padding: 10px 20px;
+            padding: 12px 20px;
             background-color: #28a745;
             color: white;
             border: none;
-            border-radius: 20px;
+            border-radius: 25px;
+            font-size: 16px;
+            font-weight: bold;
             cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: background-color 0.3s ease, transform 0.2s;
         }
 
         #upload-button:hover {
-            background-color: #218838;
+            background-color: #218838; 
+            transform: translateY(-2px);
         }
 
-        /* File input hidden by default */
         #file-input {
             display: none;
         }
+        /* Icons */
+        button .icon {
+            font-size: 20px;
+            display: inline-block;
+        }
+        @media (max-width: 768px) {
+        #input-section {
+            flex-direction: column; /* Stack elements on smaller screens */
+            gap: 10px;
+        }
+
+        #send-button,
+        #upload-button {
+            width: 100%; /* Full width for buttons */
+        }
+    }
     </style>
 </head>
 <body>
@@ -524,7 +562,7 @@
             const pdfLink = document.createElement("a");
             pdfLink.href = pdfUrl;
             pdfLink.download = data.pdf_filename || "document.pdf";
-            pdfLink.textContent = "📄 Download Devis (PDF)";
+            pdfLink.textContent = "📄 Télecharger votre Devis ";
             pdfLink.target = "_blank";
 
             pdfLinkDiv.appendChild(pdfLink);
