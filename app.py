@@ -5,7 +5,6 @@ import psycopg2
 import re
 from jinja2 import Environment, FileSystemLoader
 import pdfkit
-import pandas as pd
 import joblib
 import logging
 from sklearn.impute import SimpleImputer
@@ -388,6 +387,50 @@ def predict_price():
     except Exception as e:
         logging.error(f"Error in prediction: {e}")
         return jsonify({"error": "Failed to predict price."}), 500
+def extract_information(user_input):
+    """
+    Extracts company name, address, VAT number, and email from unordered input.
+    """
+    # Normalize the input (remove extra spaces, lowercase)
+    user_input = user_input.strip().lower()
+
+    # Define patterns to extract each piece of data
+    patterns = {
+        # Company Name
+        "nom_entreprise": r"(?:(?:on est|nous sommes|nom est|entreprise|sociét[ée]?|societe|c'est|nom de sociét[ée]?|la sociét[ée]? s'appelle|la societe s'appelle)\s*([\w\s]+))|^([\w\s]+)",
+
+        # Address
+        "adresse_entreprise": r"(?:situ[ée]?(?:e)?(?: à| a| est à| est a| basé[ée]? à| localisé[ée]? à| localisée| dans| adress[e]?|adresse(?: est)?)|localisation|localizé|locazion)\s*([\w\s,]+)",
+
+        # VAT Number
+        "n_tva": r"(fr\d{11}|vat\d{11}|numéro de tva\d{11}|numéro tva|tva\s*:\s*fr\d{11}|tva\s*fr\d{11}|num tva|tv[ae]\s*fr\d{11})",
+
+        # Email
+        "email": r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)"
+    }
+
+    extracted_data = {
+        "nom_entreprise": None,
+        "adresse_entreprise": None,
+        "n_tva": None,
+        "email": None
+    }
+
+    # Extract each piece of data based on its pattern
+    for key, pattern in patterns.items():
+        match = re.search(pattern, user_input, re.IGNORECASE)
+        if match:
+            # Use the first non-None group
+            extracted_data[key] = next((group for group in match.groups() if group), None)
+
+    # Handle edge cases for partial/misleading input
+    # If the extracted company name contains VAT or address, remove them
+    if extracted_data["nom_entreprise"]:
+        # Avoid VAT numbers or "situé à" being part of the company name
+        extracted_data["nom_entreprise"] = re.sub(r"(fr\d{11}|situé(?:e)? à.*)", "", extracted_data["nom_entreprise"], flags=re.IGNORECASE).strip()
+
+    return extracted_data
+
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -411,34 +454,78 @@ def chat():
             return jsonify({"response": get_variable_response("ask_company_name")})
 
         elif step == 2:
-            session['data']['nom_entreprise'] = user_input
+            logging.info("Step 2: Parsing user input for mixed information.")
+            logging.info(f"Raw user input: {user_input}")
 
-            # Fetch company details from both tables
-            cursor.execute("""
-                SELECT 
-                    i.adresse_entreprise, 
-                    i.n_tva, 
-                    ic.email 
-                FROM informations AS i
-                LEFT JOIN informations_client AS ic 
-                ON i.nom_entreprise = ic.nom_client
-                WHERE i.nom_entreprise = %s
-            """, (user_input,))
-            company_data = cursor.fetchone()
+            # 1. Extract the user input for mixed information
+            extracted_data = extract_information(user_input)
+            logging.info(f"Extracted data from user input: {extracted_data}")
 
-            if company_data:
-                # Company exists, unpack the data
-                session['data']['adresse_entreprise'] = company_data[0] or "Non spécifié"
-                session['data']['n_tva'] = company_data[1] or "Non spécifié"
-                session['data']['email'] = company_data[2] or "Non spécifié"
+            # Update session with extracted data
+            session['data']['nom_entreprise'] = extracted_data['nom_entreprise'] or session['data'].get('nom_entreprise')
+            session['data']['adresse_entreprise'] = extracted_data['adresse_entreprise'] or session['data'].get('adresse_entreprise', "Non spécifié")
+            session['data']['n_tva'] = extracted_data['n_tva'] or session['data'].get('n_tva', "Non spécifié")
+            session['data']['email'] = extracted_data['email'] or session['data'].get('email', "Non spécifié")
+            logging.info(f"Updated session data: {session['data']}")
 
-                # Skip steps and go directly to asking for the user name
-                session['step'] = 6
-                return jsonify({"response": "La société existe déjà. Passons directement à votre nom d'utilisateur."})
-            else:
-                # Company does not exist, proceed to the next step
-                session['step'] = 3
-                return jsonify({"response": get_variable_response("ask_company_address")})
+            # 2. Check if the company already exists in the database
+            if session['data']['nom_entreprise']:
+                logging.info(f"Checking if company '{session['data']['nom_entreprise']}' exists in the database.")
+                cursor.execute("""
+                    SELECT 
+                        i.adresse_entreprise, 
+                        i.n_tva, 
+                        ic.email 
+                    FROM informations AS i
+                    LEFT JOIN informations_client AS ic 
+                    ON i.nom_entreprise = ic.nom_client
+                    WHERE i.nom_entreprise = %s
+                """, (session['data']['nom_entreprise'],))
+                company_data = cursor.fetchone()
+                logging.info(f"Database result for company '{session['data']['nom_entreprise']}': {company_data}")
+
+                if company_data:
+                    # Company exists, update session with DB data
+                    session['data']['adresse_entreprise'] = company_data[0] or session['data']['adresse_entreprise']
+                    session['data']['n_tva'] = company_data[1] or session['data']['n_tva']
+                    session['data']['email'] = company_data[2] or session['data']['email']
+                    logging.info("Company found in database. Updated session data with database values.")
+                    logging.info(f"Final session data: {session['data']}")
+
+                    # Skip to step 6
+                    session['step'] = 6
+                    return jsonify({"response": get_variable_response("company_already_exists")})
+
+            # 3. Check if required information is missing
+            missing_fields = []
+            if not session['data']['adresse_entreprise'] or session['data']['adresse_entreprise'] == "Non spécifié":
+                missing_fields.append("adresse de l'entreprise")
+            if not session['data']['n_tva'] or session['data']['n_tva'] == "Non spécifié":
+                missing_fields.append("numéro de TVA")
+            if not session['data']['email'] or session['data']['email'] == "Non spécifié":
+                missing_fields.append("adresse email")
+
+            logging.info(f"Missing fields: {missing_fields}")
+
+            # 4. Redirect to the correct step based on missing fields
+            if missing_fields:
+                if "adresse de l'entreprise" in missing_fields:
+                    logging.info("Redirecting to Step 3 to collect the address.")
+                    session['step'] = 3
+                    return jsonify({"response": get_variable_response("ask_company_address")})
+                elif "numéro de TVA" in missing_fields:
+                    logging.info("Redirecting to Step 4 to collect the VAT number.")
+                    session['step'] = 4
+                    return jsonify({"response": get_variable_response("ask_vat_number")})
+                elif "adresse email" in missing_fields:
+                    logging.info("Redirecting to Step 5 to collect the email.")
+                    session['step'] = 5
+                    return jsonify({"response": get_variable_response("ask_email")})
+
+            # 5. If all fields are provided, move to the next step
+            logging.info("All fields provided. Proceeding to Step 6.")
+            session['step'] = 6
+            return jsonify({"response": get_variable_response("ask_user_name")})
 
         elif step == 3:
             session['data']['adresse_entreprise'] = user_input
@@ -448,7 +535,7 @@ def chat():
         elif step == 4:
             user_input = user_input.strip().upper()  # Ensure input is cleaned and uppercase
             if not re.match(r"^FR\d{11}$", user_input):
-                return jsonify({"response": "Le numéro de TVA que vous avez saisi est invalide. Assurez-vous qu'il commence par 'FR' suivi de 11 chiffres. Exemple : 'FR12345678901'."})
+                return jsonify({"response": get_variable_response("invalid_vat")})
             session['data']['n_tva'] = user_input
             session['step'] = 5
             return jsonify({"response": get_variable_response("ask_email")})
@@ -468,7 +555,7 @@ def chat():
 
         elif step == 7:
             user_input_lower = user_input.lower().strip()
-            if re.search(r"(commander|acheter|demander|besoin|recherche)", user_input.lower()):
+            if re.search(r"(commander|acheter|demander|besoin de |recherche)", user_input.lower()):
                 # Log the user input
                 logging.debug(f"User input received: {user_input}")
 
@@ -493,10 +580,7 @@ def chat():
 
                         if not results:
                             logging.warning(f"No products found for keyword: {keyword}")
-                            return jsonify({
-                                "response": f"Désolé, aucun produit trouvé pour '{keyword}'. "
-                                            f"Veuillez essayer un autre mot-clé ou entrez une référence directement."
-                            })
+                            return jsonify({"response": get_variable_response("no_products")})
 
                         # Convert results into a structured product list
                         product_list = [{"ref": row[0], "designation": row[1]} for row in results]

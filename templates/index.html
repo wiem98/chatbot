@@ -481,14 +481,32 @@
                 }
 
                 document.getElementById("user-input").value = "";
+                }
             }
-        }
 
-        function displayResponse(data) {
-        const chatBox = document.getElementById("chat-box");
+            let isFirstMessage = true; // Track if it's the first bot message
+
+function displayResponse(data) {
+    const chatBox = document.getElementById("chat-box");
+
+    if (isFirstMessage) {
+        // For the first message, display it immediately
         const botResponse = data.response || "Error in response.";
         appendMessage(botResponse, "bot");
-        if (data.preview_image) {
+        isFirstMessage = false; // Update the flag after the first message
+    } else {
+        // Simulate typing before showing the bot's response
+        const delay = Math.min(1000, 5);
+        showTypingIndicator();
+
+        setTimeout(() => {
+            hideTypingIndicator();
+
+            const botResponse = data.response || "Error in response.";
+            appendMessage(botResponse, "bot");
+
+            // Display preview image if available
+            if (data.preview_image) {
                 const previewDiv = document.createElement("div");
                 previewDiv.className = "message bot";
 
@@ -497,96 +515,96 @@
                 previewImage.alt = "Devis Preview";
                 previewImage.style.maxWidth = "100%";
                 previewImage.style.borderRadius = "10px";
-                previewImage.style.cursor = "pointer"; // Add pointer cursor
-                previewImage.onclick = () => showModal(data.preview_image); // Open modal on click
+                previewImage.style.cursor = "pointer";
+                previewImage.onclick = () => showModal(data.preview_image);
 
                 previewDiv.appendChild(previewImage);
                 chatBox.appendChild(previewDiv);
             }
 
-        if (data.product_list && Array.isArray(data.product_list)) {
-            const tableDiv = document.createElement("div");
-            tableDiv.className = "message bot";
+            // Display product list if available
+            if (data.product_list && Array.isArray(data.product_list)) {
+                const tableDiv = document.createElement("div");
+                tableDiv.className = "message bot";
 
-            const table = document.createElement("table");
-            table.style.width = "100%";
-            table.style.borderCollapse = "collapse";
-            table.style.marginTop = "10px";
+                const table = document.createElement("table");
+                table.style.width = "100%";
+                table.style.borderCollapse = "collapse";
+                table.style.marginTop = "10px";
 
-            // Add table header
-            const headerRow = document.createElement("tr");
-            ["Reference", "Designation"].forEach(headerText => {
-                const th = document.createElement("th");
-                th.textContent = headerText;
-                th.style.border = "1px solid #ccc";
-                th.style.padding = "8px";
-                th.style.backgroundColor = "#f2f2f2";
-                th.style.textAlign = "left";
-                headerRow.appendChild(th);
-            });
-            table.appendChild(headerRow);
+                const headerRow = document.createElement("tr");
+                ["Reference", "Designation"].forEach((headerText) => {
+                    const th = document.createElement("th");
+                    th.textContent = headerText;
+                    th.style.border = "1px solid #ccc";
+                    th.style.padding = "8px";
+                    th.style.backgroundColor = "#f2f2f2";
+                    th.style.textAlign = "left";
+                    headerRow.appendChild(th);
+                });
+                table.appendChild(headerRow);
 
-            // Add table rows for each product
-            data.product_list.forEach(product => {
-                const row = document.createElement("tr");
+                data.product_list.forEach((product) => {
+                    const row = document.createElement("tr");
 
-                const refCell = document.createElement("td");
-                refCell.textContent = product.ref;
-                refCell.style.border = "1px solid #ccc";
-                refCell.style.padding = "8px";
-                row.appendChild(refCell);
+                    const refCell = document.createElement("td");
+                    refCell.textContent = product.ref;
+                    refCell.style.border = "1px solid #ccc";
+                    refCell.style.padding = "8px";
+                    row.appendChild(refCell);
 
-                const designationCell = document.createElement("td");
-                designationCell.textContent = product.designation;
-                designationCell.style.border = "1px solid #ccc";
-                designationCell.style.padding = "8px";
-                row.appendChild(designationCell);
+                    const designationCell = document.createElement("td");
+                    designationCell.textContent = product.designation;
+                    designationCell.style.border = "1px solid #ccc";
+                    designationCell.style.padding = "8px";
+                    row.appendChild(designationCell);
 
-                table.appendChild(row);
-            });
+                    table.appendChild(row);
+                });
 
-            tableDiv.appendChild(table);
-            chatBox.appendChild(tableDiv);
-        }
+                tableDiv.appendChild(table);
+                chatBox.appendChild(tableDiv);
+            }
 
-        chatBox.scrollTop = chatBox.scrollHeight;
+            // Display download link for PDF if available
+            if (data.pdf_data) {
+                const pdfBlob = base64ToBlob(data.pdf_data, "application/pdf");
+                const pdfUrl = URL.createObjectURL(pdfBlob);
 
-        // Display download link for PDF if available
-        if (data.pdf_data) {
-            const pdfBlob = base64ToBlob(data.pdf_data, 'application/pdf');
-            const pdfUrl = URL.createObjectURL(pdfBlob);
+                const pdfLinkDiv = document.createElement("div");
+                pdfLinkDiv.className = "message bot";
 
-            const pdfLinkDiv = document.createElement("div");
-            pdfLinkDiv.className = "message bot";
+                const pdfLink = document.createElement("a");
+                pdfLink.href = pdfUrl;
+                pdfLink.download = data.pdf_filename || "document.pdf";
+                pdfLink.textContent = "📄 Télécharger votre Devis";
+                pdfLink.target = "_blank";
 
-            const pdfLink = document.createElement("a");
-            pdfLink.href = pdfUrl;
-            pdfLink.download = data.pdf_filename || "document.pdf";
-            pdfLink.textContent = "📄 Télecharger votre Devis ";
-            pdfLink.target = "_blank";
+                pdfLinkDiv.appendChild(pdfLink);
+                chatBox.appendChild(pdfLinkDiv);
+            }
 
-            pdfLinkDiv.appendChild(pdfLink);
-            chatBox.appendChild(pdfLinkDiv);
-        }
-
-        chatBox.scrollTop = chatBox.scrollHeight;
-    }
-
-        function appendMessage(message, sender) {
-            const chatBox = document.getElementById("chat-box");
-            const messageDiv = document.createElement("div");
-            messageDiv.className = `message ${sender}`;
-            messageDiv.textContent = message;
-            chatBox.appendChild(messageDiv);
             chatBox.scrollTop = chatBox.scrollHeight;
-        }
+        }, 1000); // Simulated delay for typing
+    }
+}
 
-        function base64ToBlob(base64, mimeType) {
-            const byteCharacters = atob(base64);
-            const byteNumbers = Array.from(byteCharacters, char => char.charCodeAt(0));
-            const byteArray = new Uint8Array(byteNumbers);
-            return new Blob([byteArray], { type: mimeType });
-        }
+function appendMessage(message, sender) {
+    const chatBox = document.getElementById("chat-box");
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `message ${sender}`;
+    messageDiv.innerHTML = message.replace(/\n/g, "<br>");
+    chatBox.appendChild(messageDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function base64ToBlob(base64, mimeType) {
+    const byteCharacters = atob(base64);
+    const byteNumbers = Array.from(byteCharacters, (char) => char.charCodeAt(0));
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type: mimeType });
+}
+
     </script>
 </body>
 </html>
