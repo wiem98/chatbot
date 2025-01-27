@@ -21,7 +21,7 @@ from flask_mail import Message
 from mail_config import init_mail
 import base64
 from pdf2image import convert_from_path
-from PIL import ImageEnhance, ImageDraw, ImageFont, ImageOps, ImageFilter
+from PIL import ImageEnhance
 
 
 app = Flask(__name__)
@@ -80,10 +80,10 @@ def normalize_input(user_input):
     """
     # Predefined lexicon mapping phrases to normalized commands
     lexicon = {
-        r"(je veux|je souhaite|svp|veuillez)": "",  # Remove polite filler phrases
-        r"(le nom est|mon nom est)": "set_name",  # Normalize name setting
-        r"(créer|nouveau|initier)": "create",  # Normalize creation commands
-        r"(adresse|l'adresse est)": "set_address",  # Normalize address commands
+        r"(je veux|je souhaite|svp|veuillez|j'ai)": "", 
+        r"(le nom est|mon nom est|on est)": "set_name",  
+        r"(créer|nouveau|initier)": "create",  
+        r"(adresse|l'adresse est)": "set_address",  
     }
     
     # Lowercase and trim input
@@ -143,13 +143,6 @@ def predict_status(features):
     - Allow transitions from 'nouveau' to 'normal'
     - Allow transitions from 'normal' to 'VIP'
     - Allow downgrades from 'VIP' to 'normal'
-    - Prevent any other status transitions by inferring current behavior patterns.
-
-    Parameters:
-        features (dict): Dictionary of client features for prediction.
-
-    Returns:
-        str: The new status based on prediction and rules.
     """
     try:
         # Ensure feature format matches the model input
@@ -209,6 +202,16 @@ def log_status_change(client_name, old_status, new_status, reason):
             (client_name, old_status, new_status, reason, datetime.now())
         )
         conn.commit()
+        cursor.execute(
+            """
+            UPDATE informations_client
+            SET status = %s
+            WHERE nom_client = %s
+            """,
+            (new_status, client_name)
+        )
+        conn.commit()
+
         logging.info(f"Status change logged for client '{client_name}': {old_status} -> {new_status}")
     except Exception as e:
         logging.error(f"Failed to log status change for client '{client_name}': {e}", exc_info=True)
@@ -470,7 +473,7 @@ def chat():
                 logging.debug(f"User input received: {user_input}")
 
                 # Extract the keyword (e.g., "ecrou")
-                keyword_match = re.search(r"(?:commander|acheter|demander|besoin|recherche) (?:un|une) (\w+)", user_input.lower())
+                keyword_match = re.search(r"(?:commander|acheter|demander|besoin|recherche) (?:un|une|des|du) (\w+)", user_input.lower())
                 if keyword_match:
                     keyword = keyword_match.group(1)
                     logging.debug(f"Keyword extracted: {keyword}")  # Log extracted keyword
@@ -529,12 +532,12 @@ def chat():
                         quantity = int(quantity)
                         current_date = datetime.now()
                         features = [
-                            prix_achat,              # `prix_achat`
-                            quantity,                # `quantite`
+                            prix_achat,              
+                            quantity,                
                             stock,
-                            current_date.year,       # `year`
-                            current_date.month,      # `month`
-                            0.1                      # `markup` (default or calculated)
+                            current_date.year,       
+                            current_date.month,     
+                            0.1                      
                         ]
 
                         # Predict the selling price
@@ -577,7 +580,7 @@ def chat():
             # Calculate order summary
             items = session['data']['products']
             base_ht = sum(item['total_produit'] for item in items)
-            montant_taxes = round(base_ht * 0.2, 2)  # Assuming a 20% tax rate
+            montant_taxes = round(base_ht * 0.2, 2)  
             net_a_payer = round(base_ht + montant_taxes, 2)
 
             session['data']['base_ht'] = base_ht
@@ -585,7 +588,6 @@ def chat():
             session['data']['net_a_payer'] = net_a_payer
 
             try:
-                # Insert or update all products in the database
                 for item in session['data']['products']:
                     cursor.execute(
                         """
@@ -605,9 +607,9 @@ def chat():
                         cursor.execute(
                             query_update,
                             (
-                                item['quantite'],  # Updated quantity
-                                item['total_produit'],  # Updated total price
-                                item['prix_unitaire'],  # Selling price
+                                item['quantite'], 
+                                item['total_produit'],  
+                                item['prix_unitaire'],  
                                 session['data']['nom_entreprise'],
                                 item['reference'],
                                 session['data']['nom_user']
@@ -625,16 +627,16 @@ def chat():
                         values = (
                             session['data']['nom_entreprise'],
                             session['data']['nom_user'],
-                            item['description'],  # Product description
-                            item['quantite'],  # Quantity of the product
+                            item['description'],  
+                            item['quantite'],  
                             session['data']['adresse_entreprise'],
                             session['data']['n_tva'],
                             item['total_produit'],  # Quantity * prix_ventes
-                            base_ht,  # Total command value (sum of total_produit)
+                            base_ht,  # Total command value 
                             montant_taxes,
                             net_a_payer,
                             item['reference'],  # Product reference
-                            item.get('prix_achat', None),  # Initial price (if available)
+                            item.get('prix_achat', None),  # Initial price 
                             datetime.now(),  # Current date
                             item['prix_unitaire'],  # Selling price
                             "nouveau"  # Default status
