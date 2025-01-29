@@ -13,13 +13,13 @@ def get_variable_response(step):
             "Bonjour ! Parlez-moi de vos besoins et voyons comment je peux vous aider."
         ],
         "ask_company_name": [
-            "Bonjour et bienvenue ! Pour commencer, pourriez-vous m’indiquer le nom de votre entreprise ?",
-            "Salut ! J’aurais besoin du nom de votre société pour personnaliser votre devis.",
-            "Bonjour ! Pour créer votre devis, j’ai besoin de savoir comment s’appelle votre entreprise.",
-            "Merci de me donner le nom exact de votre société pour qu’on puisse continuer.",
-            "Quel est le nom de votre entreprise ? Cela nous permettra de bien personnaliser vos documents.",
-            "Je vais vous accompagner dans la création du devis. Quel est le nom de votre société ?",
-            "Pouvez-vous m’indiquer le nom de votre entreprise, s’il vous plaît ?"
+           "Bonjour et bienvenue ! Pour commencer, pourriez-vous me donner quelques informations sur votre entreprise ?"
+            "Salut ! J’aurais besoin de quelques détails sur votre société pour personnaliser votre devis.",
+            "Bonjour ! Pour créer votre devis, pourriez-vous m’indiquer les informations importantes concernant votre entreprise ?",
+            "Merci de me fournir les informations essentielles sur votre société pour qu’on puisse continuer.",
+            "Pouvez-vous m’indiquer les détails de votre entreprise ? Cela nous permettra de bien personnaliser vos documents.",
+            "Je vais vous accompagner dans la création du devis. Pour cela, j’ai besoin de quelques informations sur votre société.",
+            "Pouvez-vous me partager les informations principales concernant votre entreprise, s’il vous plaît ?"
         ],
         
         "ask_company_address": [

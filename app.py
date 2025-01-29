@@ -387,51 +387,135 @@ def predict_price():
     except Exception as e:
         logging.error(f"Error in prediction: {e}")
         return jsonify({"error": "Failed to predict price."}), 500
+
+
 def extract_information(user_input):
     """
-    Extracts company name, address, VAT number, and email from unordered input.
+    Extracts company name, address, VAT number, email, and user name from unordered input.
     """
-    # Normalize the input (remove extra spaces, lowercase)
-    user_input = user_input.strip().lower()
+    # Normalize input (remove extra spaces)
+    user_input = user_input.strip()
 
-    # Define patterns to extract each piece of data
+    # Fix "cest" to "c'est" for better email detection
+    user_input = re.sub(r"\bcest\b", "c'est", user_input, flags=re.IGNORECASE)
+
+    print(f"Debugging Input Before Extraction: {user_input}")  # **Add this line to print processed input**
+
+    # Define refined regex patterns
     patterns = {
-        # Company Name
-        "nom_entreprise": r"(?:(?:on est|nous sommes|nom est|entreprise|sociét[ée]?|societe|c'est|nom de sociét[ée]?|la sociét[ée]? s'appelle|la societe s'appelle)\s*([\w\s]+))|^([\w\s]+)",
+        # User Name (Capture only the actual name)
+        "nom_user": r"(?:je suis|moi c'est|mon nom est|je m'appelle|on m'appelle|on me connaît sous le nom de|le gérant|la gérante|le responsable|la responsable|directeur|directrice|responsable des ventes|responsable commercial|chef d'entreprise|PDG|propriétaire|dirigeant|chef de projet|manager|co-fondateur|fondateur|partenaire|consultant|associé|entrepreneur|freelance|auto-entrepreneur|gestionnaire|administrateur|secrétaire général|président|vice-président|vendeur|commerçant|artisan|formateur|représentant|développeur|designer|marketeur|chargé de mission|expert|coach|professeur|avocat|ingénieur|médecin|notaire|courtier|agent immobilier|recruteur|indépendant|auto-entrepreneur|travailleur indépendant|je me présente|je me prénomme)\s+([\w-]+\s[\w-]+)",
 
-        # Address
-        "adresse_entreprise": r"(?:situ[ée]?(?:e)?(?: à| a| est à| est a| basé[ée]? à| localisé[ée]? à| localisée| dans| adress[e]?|adresse(?: est)?)|localisation|localizé|locazion)\s*([\w\s,]+)",
+        # **Company Name (Even more variations for precision)**
+        "nom_entreprise": r"(?:de la société|de la societe|de l'entreprise|nom de la société|nom de la societe|la société s'appelle|la societe s'appelle|entreprise|société|notre société|notre societe|ma société|ma societe|nous sommes la société|nous sommes la societe|la firme|la compagnie|groupe|groupe industriel|corporation|start-up|ma boîte|mon entreprise|notre entreprise|ma boîte|mon enseigne|mon commerce|notre commerce|ma structure|mon agence|notre agence|cabinet|établissement|centre|boutique|marque|filiale|holding|association|coopérative|bureau|organisme|franchise|atelier|usine|studio|restaurant|bar|hôtel|chaîne|enseigne|ma marque)\s+([\w-]+)",
 
-        # VAT Number
-        "n_tva": r"(fr\d{11}|vat\d{11}|numéro de tva\d{11}|numéro tva|tva\s*:\s*fr\d{11}|tva\s*fr\d{11}|num tva|tv[ae]\s*fr\d{11})",
+        # **Address (Covers even more ways people mention location)**
+        "adresse_entreprise": r"(?:\b(situ[ée]?|situ[ée]s?|situé a|situe a|basé[ée]?|basé[ée]s?|basée a|basee a|basé a|base a |localisé[ée]|localisé[ée]s|localisation|adresse|sise à|sise a|dans|adresse(?: est)?|notre adresse|l'adresse|se trouve à|installé à|implanté à|réside à|localisé à|nous sommes à|nous sommes situés à|nous avons un bureau à|Nos bureaux se trouvent à| notre bureaux se trouve à|nous sommes implantés à|nos locaux sont à|notre siège est à|notre siège social est à|se situe à|domicilié à|établi à|nous exerçons à|nos bureaux sont à|notre agence est à|notre établissement est à|nous opérons à|nous sommes enregistrés à|l’entreprise est située à|l’entreprise est implantée à|le siège administratif est à|notre point de vente est à|nos locaux commerciaux sont à|nous avons un point de vente à|nous avons plusieurs bureaux à|nos entrepôts sont situés à|le magasin est basé à|notre centre d’affaires est à|notre centre de production est à|nous fabriquons à|notre usine est implantée à|notre filiale est située à|nos locaux principaux sont à|nous avons des bureaux à|nos bureaux principaux sont à|le siège opérationnel est à|notre adresse commerciale est à)\b)\s+([\w\s,-]+(?:\d{1,5}[\s,-]*\w*)*)",
 
-        # Email
-        "email": r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)"
+        # **VAT Number (Keeping it for structured business information)**
+        "n_tva": r"\b(FR\d{11})\b",
+
+        # **Email (Already strong, no changes needed)**
+        "email": r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)",
+
     }
 
     extracted_data = {
         "nom_entreprise": None,
         "adresse_entreprise": None,
         "n_tva": None,
-        "email": None
+        "email": None,
+        "nom_user": None
     }
 
-    # Extract each piece of data based on its pattern
     for key, pattern in patterns.items():
         match = re.search(pattern, user_input, re.IGNORECASE)
         if match:
-            # Use the first non-None group
-            extracted_data[key] = next((group for group in match.groups() if group), None)
-
-    # Handle edge cases for partial/misleading input
-    # If the extracted company name contains VAT or address, remove them
-    if extracted_data["nom_entreprise"]:
-        # Avoid VAT numbers or "situé à" being part of the company name
-        extracted_data["nom_entreprise"] = re.sub(r"(fr\d{11}|situé(?:e)? à.*)", "", extracted_data["nom_entreprise"], flags=re.IGNORECASE).strip()
+            extracted_data[key] = match.group(1).strip()
+            print(f"Extracted {key}: {extracted_data[key]}")  # **Debugging each extracted field**
 
     return extracted_data
 
+def standardize_user_input(user_input):
+    """
+    Standardizes user input by replacing variations of company-related phrases
+    with standardized terms for better regex extraction.
+    """
+    # Convert input to lowercase for uniform processing
+    user_input = user_input.lower()
+    greetings = [
+        r"\bbonjour\b", r"\bsalut\b", r"\bbonsoir\b", r"\bcoucou\b", r"\byo\b", r"\bhey\b",
+        r"\bhello\b", r"\bhi\b", r"\bcher\b", r"\bchère\b", r"\bmonsieur\b", r"\bmadame\b",
+        r"\bmesdames et messieurs\b", r"\bme\b", r"\bm\b", r"\bmlle\b", r"\bmme\b", r"\bdistingué\b",
+        r"\bcordialement\b", r"\bavec mes salutations\b", r"\bmes respects\b"
+    ]
 
+    # Remove greetings from the beginning of the sentence
+    user_input = re.sub(r"^(" + "|".join(greetings) + r")[,!\s]*", "", user_input, flags=re.IGNORECASE)
+
+    # Define common word variations to standardize
+    replacements = {
+        # Standardizing Email Mentions
+        r"\bnotre email est\b": "email:",
+    r"\bnous contacter à\b": "email:",
+    r"\bcontactez-nous sur\b": "email:",
+    r"\bnos coordonnées email sont\b": "email:",
+    r"\bnotre adresse email est\b": "email:",
+    r"\badresse électronique\b": "email:",
+    r"\bemail de contact\b": "email:",
+    r"\bemail professionnel\b": "email:",
+    r"\bemail officiel\b": "email:",
+    r"\bnous écrire à\b": "email:",
+    r"\bjoignable par email à\b": "email:",
+    r"\bnous envoyer un email à\b": "email:",
+    r"\bpour nous contacter, utilisez\b": "email:",
+    r"\bnous joindre à\b": "email:",
+    r"\bemail direct\b": "email:",
+    r"\bcontact direct par email\b": "email:",
+    r"\badresse email de l'entreprise\b": "email:",
+    r"\bemail du service client\b": "email:",
+    r"\bemail pour réclamation\b": "email:",
+    r"\bemail du support\b": "email:",
+    r"\bemail administratif\b": "email:",
+
+    # **Standardizing VAT Mentions (More Synonyms)**
+    r"\bnotre tva\b": "numéro de TVA",
+    r"\bnotre numéro de tva est\b": "numéro de TVA:",
+    r"\bdont notre tva est\b": "numéro de TVA:",
+    r"\bdont notre numéro de tva\b": "numéro de TVA:",
+    r"\bla valeur de tva est\b": "numéro de TVA:",
+    r"\bla valeur du code tva\b": "numéro de TVA:",
+    r"\bnous sommes enregistrés sous le code tva\b": "numéro de TVA:",
+    r"\bnuméro de taxe\b": "numéro de TVA:",
+    r"\bnous sommes enregistrés sous le numéro de TVA\b": "numéro de TVA:",
+    r"\bTVA enregistrée sous\b": "numéro de TVA:",
+    r"\bTVA de notre entreprise\b": "numéro de TVA:",
+    r"\bnous déclarons la TVA sous\b": "numéro de TVA:",
+    r"\bTVA facturée sous\b": "numéro de TVA:",
+    r"\bTVA appliquée sur\b": "numéro de TVA:",
+    r"\bnuméro fiscal de TVA\b": "numéro de TVA:",
+    r"\bTVA attribuée à\b": "numéro de TVA:",
+    r"\bnuméro d'enregistrement TVA\b": "numéro de TVA:",
+    r"\bTVA entreprise\b": "numéro de TVA:",
+    r"\bcode TVA\b": "numéro de TVA:",
+    r"\bTVA identifiée sous\b": "numéro de TVA:",
+    r"\bnous collectons la TVA sous\b": "numéro de TVA:",
+    r"\bnotre entreprise est assujettie à la TVA sous\b": "numéro de TVA:",
+    r"\bTVA sous le numéro\b": "numéro de TVA:",
+    r"\bTVA officielle\b": "numéro de TVA:",
+    r"\bTVA en vigueur\b": "numéro de TVA:",
+    r"\bTVA enregistrée\b": "numéro de TVA:",
+    r"\bTVA active\b": "numéro de TVA:",     
+    }
+
+    # Apply replacements
+    for pattern, replacement in replacements.items():
+        user_input = re.sub(pattern, replacement, user_input, flags=re.IGNORECASE)
+
+    # Ensure "nom utilisateur:" and "nom de la société:" are not overwritten incorrectly
+    user_input = re.sub(r"nom utilisateur:\s*de\s*", "nom de la société: ", user_input)
+
+    return user_input.strip()
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
@@ -458,7 +542,11 @@ def chat():
             logging.info(f"Raw user input: {user_input}")
 
             # 1. Extract the user input for mixed information
-            extracted_data = extract_information(user_input)
+            standardized_input = standardize_user_input(user_input)
+            logging.info(f"Standardized user input: {standardized_input}")
+
+            # 2. Extract the user input for mixed information
+            extracted_data = extract_information(standardized_input)            
             logging.info(f"Extracted data from user input: {extracted_data}")
 
             # Update session with extracted data
@@ -466,6 +554,8 @@ def chat():
             session['data']['adresse_entreprise'] = extracted_data['adresse_entreprise'] or session['data'].get('adresse_entreprise', "Non spécifié")
             session['data']['n_tva'] = extracted_data['n_tva'] or session['data'].get('n_tva', "Non spécifié")
             session['data']['email'] = extracted_data['email'] or session['data'].get('email', "Non spécifié")
+            session['data']['nom_user'] = extracted_data['nom_user'] or session['data'].get('nom_user', "Non spécifié")
+
             logging.info(f"Updated session data: {session['data']}")
 
             # 2. Check if the company already exists in the database
@@ -504,98 +594,162 @@ def chat():
                 missing_fields.append("numéro de TVA")
             if not session['data']['email'] or session['data']['email'] == "Non spécifié":
                 missing_fields.append("adresse email")
+            
+            if not session['data']['nom_user'] or session['data']['nom_user'] == "Non spécifié":
+                missing_fields.append("nom de l'utilisateur")
 
             logging.info(f"Missing fields: {missing_fields}")
 
             # 4. Redirect to the correct step based on missing fields
+            # 4. Ask for the next missing field (if any)
             if missing_fields:
-                if "adresse de l'entreprise" in missing_fields:
+                next_missing_field = missing_fields[0]  # Pick the first missing field
+                
+                if next_missing_field == "adresse de l'entreprise":
                     logging.info("Redirecting to Step 3 to collect the address.")
                     session['step'] = 3
                     return jsonify({"response": get_variable_response("ask_company_address")})
-                elif "numéro de TVA" in missing_fields:
+                elif next_missing_field == "numéro de TVA":
                     logging.info("Redirecting to Step 4 to collect the VAT number.")
                     session['step'] = 4
                     return jsonify({"response": get_variable_response("ask_vat_number")})
-                elif "adresse email" in missing_fields:
+                elif next_missing_field == "adresse email":
                     logging.info("Redirecting to Step 5 to collect the email.")
                     session['step'] = 5
                     return jsonify({"response": get_variable_response("ask_email")})
+                elif next_missing_field == "nom de l'utilisateur":
+                    logging.info("Redirecting to Step 6 to collect the user's name.")
+                    session['step'] = 6
+                    return jsonify({"response": get_variable_response("ask_user_name")})
 
-            # 5. If all fields are provided, move to the next step
-            logging.info("All fields provided. Proceeding to Step 6.")
-            session['step'] = 6
-            return jsonify({"response": get_variable_response("ask_user_name")})
+            # If no missing fields, proceed to Step 7 directly
+            logging.info("All fields provided. Proceeding to Step 7.")
+            session['step'] = 7
+            return jsonify({"response": get_variable_response("ask_products")})
 
-        elif step == 3:
+        elif step == 3:  # Collecting address
             session['data']['adresse_entreprise'] = user_input
-            session['step'] = 4
-            return jsonify({"response": get_variable_response("ask_vat_number")})
 
-        elif step == 4:
+            # Check if VAT, email, or user name are still missing
+            missing_fields = []
+            if not session['data']['n_tva'] or session['data']['n_tva'] == "Non spécifié":
+                missing_fields.append("numéro de TVA")
+            if not session['data']['email'] or session['data']['email'] == "Non spécifié":
+                missing_fields.append("adresse email")
+            if not session['data']['nom_user'] or session['data']['nom_user'] == "Non spécifié":
+                missing_fields.append("nom de l'utilisateur")
+
+            if missing_fields:
+                next_missing_field = missing_fields[0]  # Go to the next required step
+                if next_missing_field == "numéro de TVA":
+                    session['step'] = 4
+                    return jsonify({"response": get_variable_response("ask_vat_number")})
+                elif next_missing_field == "adresse email":
+                    session['step'] = 5
+                    return jsonify({"response": get_variable_response("ask_email")})
+                elif next_missing_field == "nom de l'utilisateur":
+                    session['step'] = 6
+                    return jsonify({"response": get_variable_response("ask_user_name")})
+
+            # If no fields are missing, proceed directly to Step 7
+            session['step'] = 7
+            return jsonify({"response": get_variable_response("ask_products")})
+
+
+        elif step == 4:  # Collecting VAT number
             user_input = user_input.strip().upper()  # Ensure input is cleaned and uppercase
             if not re.match(r"^FR\d{11}$", user_input):
                 return jsonify({"response": get_variable_response("invalid_vat")})
+            
             session['data']['n_tva'] = user_input
-            session['step'] = 5
-            return jsonify({"response": get_variable_response("ask_email")})
 
-        elif step == 5:
+            # Check what is still missing
+            missing_fields = []
+            if not session['data']['email'] or session['data']['email'] == "Non spécifié":
+                missing_fields.append("adresse email")
+            if not session['data']['nom_user'] or session['data']['nom_user'] == "Non spécifié":
+                missing_fields.append("nom de l'utilisateur")
+
+            if missing_fields:
+                next_missing_field = missing_fields[0]  # Go to the next required step
+                if next_missing_field == "adresse email":
+                    session['step'] = 5
+                    return jsonify({"response": get_variable_response("ask_email")})
+                elif next_missing_field == "nom de l'utilisateur":
+                    session['step'] = 6
+                    return jsonify({"response": get_variable_response("ask_user_name")})
+
+            session['step'] = 7
+            return jsonify({"response": get_variable_response("ask_products")})
+
+
+        elif step == 5:  # Collecting email
             if not re.match(r"[^@]+@[^@]+\.[^@]+", user_input):
                 return jsonify({"response": get_variable_response("invalid_email")})
+            
             session['data']['email'] = user_input
-            session['step'] = 6
-            return jsonify({"response": get_variable_response("ask_user_name")})
+
+            # Check if user name is still missing
+            if not session['data']['nom_user'] or session['data']['nom_user'] == "Non spécifié":
+                session['step'] = 6
+                return jsonify({"response": get_variable_response("ask_user_name")})
+
+            session['step'] = 7
+            return jsonify({"response": get_variable_response("ask_products")})
 
 
-        elif step == 6:
+        elif step == 6:  # Collecting user name
             session['data']['nom_user'] = user_input
+
             session['step'] = 7
             return jsonify({"response": get_variable_response("ask_products")})
 
         elif step == 7:
             user_input_lower = user_input.lower().strip()
-            if re.search(r"(commander|acheter|demander|besoin de |recherche)", user_input.lower()):
-                # Log the user input
+            if re.search(r"(commander|acheter|demander|besoin de|recherche|chercher)", user_input_lower):
                 logging.debug(f"User input received: {user_input}")
 
-                # Extract the keyword (e.g., "ecrou")
-                keyword_match = re.search(r"(?:commander|acheter|demander|besoin|recherche) (?:un|une|des|du) (\w+)", user_input.lower())
-                if keyword_match:
-                    keyword = keyword_match.group(1)
-                    logging.debug(f"Keyword extracted: {keyword}")  # Log extracted keyword
+                # Extract multiple keywords
+                keyword_matches = re.findall(r"(?:commander|acheter|demander|besoin de|recherche|chercher)(?:\s+(?:un|une|des|du|et)?)\s+([\w-]+)", user_input_lower)
+                extra_keywords = re.findall(r"(?:et\s+)([\w-]+)", user_input_lower)
+                keyword_matches.extend(extra_keywords)  # Combine both lists
 
-                    # Query the database for products matching the keyword
+                logging.debug(f"Keywords extracted: {keyword_matches}")
+
+                if keyword_matches:
                     try:
-                        logging.debug(f"Executing database query with keyword: {keyword}")
-                        query = """
-                            SELECT ref, designation 
-                            FROM new_product 
-                            WHERE designation ILIKE %s
-                        """
-                        cursor.execute(query, (f"{keyword}%",))
-                        results = cursor.fetchall()
-                        logging.debug(f"Database query: {query}, Parameters: {f'{keyword}%'}")
-                        logging.debug(f"Database query results: {results}")  # Log query results
+                        product_list = []
 
-                        if not results:
-                            logging.warning(f"No products found for keyword: {keyword}")
-                            return jsonify({"response": get_variable_response("no_products")})
+                        for keyword in keyword_matches:
+                            logging.debug(f"Executing database query with keyword: {keyword}")
+                            query = """
+                                SELECT ref, designation 
+                                FROM new_product 
+                                WHERE designation ILIKE %s
+                            """
+                            cursor.execute(query, (f"{keyword}%",))
+                            results = cursor.fetchall()
+                            logging.debug(f"Query results for '{keyword}': {results}")
 
-                        # Convert results into a structured product list
-                        product_list = [{"ref": row[0], "designation": row[1]} for row in results]
-                        logging.info(f"Products found for keyword '{keyword}': {product_list}")
+                            for row in results:
+                                product_list.append({"ref": row[0], "designation": row[1]})
+
+                        if not product_list:
+                            logging.warning(f"No products found for keywords: {keyword_matches}")
+                            return jsonify({"response": "Aucun produit correspondant trouvé pour votre recherche."})
+
+                        logging.info(f"Products found: {product_list}")
                         return jsonify({
-                            "response": f"Voici une liste des produits correspondant à '{keyword}':",
+                            "response": "Voici une liste des produits correspondant à votre recherche :",
                             "product_list": product_list
                         })
 
                     except Exception as e:
-                        logging.error(f"Error during product search for keyword '{keyword}': {e}", exc_info=True)
+                        logging.error(f"Error during product search: {e}", exc_info=True)
                         return jsonify({"response": "Une erreur est survenue lors de la recherche des produits."})
                 else:
                     logging.warning(f"Keyword extraction failed for user input: {user_input}")
-                    return jsonify({"response": "Je n'ai pas compris le produit que vous souhaitez commander. Veuillez préciser."})
+                    return jsonify({"response": "Je n'ai pas compris les produits que vous souhaitez commander. Veuillez préciser."})
 
             matches = re.findall(r"(\d+)\s+([A-Za-z0-9-/]+)", user_input.strip())
             errors = []
