@@ -1,0 +1,145 @@
+2025-02-03 12:49:02,081 - INFO - Status prediction model loaded successfully.
+2025-02-03 12:49:02,097 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-02-03 12:49:02,098 - INFO - [33mPress CTRL+C to quit[0m
+2025-02-03 12:49:02,309 - INFO - Session cleared: Restarting steps.
+2025-02-03 12:49:02,324 - INFO - 127.0.0.1 - - [03/Feb/2025 12:49:02] "GET / HTTP/1.1" 200 -
+2025-02-03 12:49:02,560 - INFO - 127.0.0.1 - - [03/Feb/2025 12:49:02] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:49:04,107 - INFO - 127.0.0.1 - - [03/Feb/2025 12:49:04] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:49:44,207 - INFO - Step 2: Parsing user input for mixed information.
+2025-02-03 12:49:44,209 - INFO - Raw user input: bonjour, je suis jacques moreau, pdg de smartsoft. l'entreprise se trouve à 5 rue des lilas, marseille. notre mail est support@smartsoft.com et notre numéro de tva est fr11122233344.
+2025-02-03 12:49:44,223 - INFO - Standardized user input: je suis jacques moreau, pdg de smartsoft. l'entreprise se trouve à 5 rue des lilas, marseille. notre mail est support@smartsoft.com et numéro de TVA: fr11122233344.
+2025-02-03 12:49:44,235 - INFO - Extracted data from user input: {'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:49:44,235 - INFO - Updated session data: {'products': [], 'is_partner': False, 'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:49:44,236 - INFO - Checking if company 'SmartSoft' exists in the database.
+2025-02-03 12:49:44,238 - INFO - Database result for company 'SmartSoft': None
+2025-02-03 12:49:44,238 - INFO - Missing fields: []
+2025-02-03 12:49:44,238 - INFO - All fields provided. Proceeding to Step 7.
+2025-02-03 12:49:44,242 - INFO - 127.0.0.1 - - [03/Feb/2025 12:49:44] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:49:53,129 - DEBUG - User input received: commander un ecrou
+2025-02-03 12:49:53,131 - DEBUG - Keywords extracted: ['ecrou']
+2025-02-03 12:49:53,132 - DEBUG - Executing database query with keyword: ecrou
+2025-02-03 12:49:53,145 - DEBUG - Query results for 'ecrou': [('ECIN-1-4-1/4', 'ECROU INOX 1/4 '), ('ECIN-3-8-3/8', 'ECROU INOX 3/8'), ('ECIN-1-2-1/2', 'ECROU INOX 1/2'), ('ECIN-12', 'ECROU INOX 12MM'), ('ECIN-14', 'ECROU INOX 14MM'), ('ECIN-6', 'ECROU INOX 6MM'), ('ECIN-8', 'ECROU INOX 8MM'), ('ECIN-10', 'ECROU INOX 10MM'), ('ECLE-10', 'ECROU LETON 10MM'), ('ECLE-12', 'ECROU LETON 12MM'), ('ECLE-6', 'ECROU LETON 6MM'), ('ECLE-8', 'ECROU LETON 8MM')]
+2025-02-03 12:49:53,146 - INFO - Products found: [{'ref': 'ECIN-1-4-1/4', 'designation': 'ECROU INOX 1/4 '}, {'ref': 'ECIN-3-8-3/8', 'designation': 'ECROU INOX 3/8'}, {'ref': 'ECIN-1-2-1/2', 'designation': 'ECROU INOX 1/2'}, {'ref': 'ECIN-12', 'designation': 'ECROU INOX 12MM'}, {'ref': 'ECIN-14', 'designation': 'ECROU INOX 14MM'}, {'ref': 'ECIN-6', 'designation': 'ECROU INOX 6MM'}, {'ref': 'ECIN-8', 'designation': 'ECROU INOX 8MM'}, {'ref': 'ECIN-10', 'designation': 'ECROU INOX 10MM'}, {'ref': 'ECLE-10', 'designation': 'ECROU LETON 10MM'}, {'ref': 'ECLE-12', 'designation': 'ECROU LETON 12MM'}, {'ref': 'ECLE-6', 'designation': 'ECROU LETON 6MM'}, {'ref': 'ECLE-8', 'designation': 'ECROU LETON 8MM'}]
+2025-02-03 12:49:53,151 - INFO - 127.0.0.1 - - [03/Feb/2025 12:49:53] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:50:02,479 - INFO - Produit 'ECROU LETON 8MM' ajouté ou mis à jour pour référence 'ecle-8'.
+2025-02-03 12:50:02,487 - INFO - Status change logged for client 'SmartSoft': None -> nouveau
+2025-02-03 12:50:02,488 - INFO - Products and status stored successfully for this session.
+2025-02-03 12:50:02,501 - ERROR - Error generating PDF or image: name 'platform' is not defined
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\new\app.py", line 1205, in generate_quote_base64
+    if platform.system() == "Windows":
+NameError: name 'platform' is not defined
+2025-02-03 12:50:02,503 - ERROR - Error saving data: Failed to generate PDF or image: name 'platform' is not defined
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\new\app.py", line 1205, in generate_quote_base64
+    if platform.system() == "Windows":
+NameError: name 'platform' is not defined
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\new\app.py", line 974, in chat
+    pdf_data, preview_image, pdf_path = generate_quote_base64(
+  File "C:\Users\LENOVO\new\app.py", line 1239, in generate_quote_base64
+    raise RuntimeError(f"Failed to generate PDF or image: {e}")
+RuntimeError: Failed to generate PDF or image: name 'platform' is not defined
+2025-02-03 12:50:02,507 - INFO - 127.0.0.1 - - [03/Feb/2025 12:50:02] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:51:03,301 - INFO - Status prediction model loaded successfully.
+2025-02-03 12:51:03,314 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-02-03 12:51:03,315 - INFO - [33mPress CTRL+C to quit[0m
+2025-02-03 12:51:03,812 - INFO - Session cleared: Restarting steps.
+2025-02-03 12:51:03,824 - INFO - 127.0.0.1 - - [03/Feb/2025 12:51:03] "GET / HTTP/1.1" 200 -
+2025-02-03 12:51:03,894 - INFO - 127.0.0.1 - - [03/Feb/2025 12:51:03] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:51:05,404 - INFO - 127.0.0.1 - - [03/Feb/2025 12:51:05] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:51:16,233 - INFO - Step 2: Parsing user input for mixed information.
+2025-02-03 12:51:16,234 - INFO - Raw user input: bonjour, je suis jacques moreau, pdg de smartsoft. l'entreprise se trouve à 5 rue des lilas, marseille. notre mail est support@smartsoft.com et notre numéro de tva est fr11122233344.
+2025-02-03 12:51:16,256 - INFO - Standardized user input: je suis jacques moreau, pdg de smartsoft. l'entreprise se trouve à 5 rue des lilas, marseille. notre mail est support@smartsoft.com et numéro de TVA: fr11122233344.
+2025-02-03 12:51:16,272 - INFO - Extracted data from user input: {'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:51:16,273 - INFO - Updated session data: {'products': [], 'is_partner': False, 'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:51:16,273 - INFO - Checking if company 'SmartSoft' exists in the database.
+2025-02-03 12:51:16,276 - INFO - Database result for company 'SmartSoft': ('5 rue des lilas, marseille.', 'fr11122233344', 'support@smartsoft.com')
+2025-02-03 12:51:16,277 - INFO - Company found in database. Updated session data with database values.
+2025-02-03 12:51:16,278 - INFO - Final session data: {'products': [], 'is_partner': False, 'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:51:16,278 - INFO - Company and user name detected. Proceeding directly to Step 7.
+2025-02-03 12:51:16,282 - INFO - 127.0.0.1 - - [03/Feb/2025 12:51:16] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:51:24,610 - INFO - Produit 'ECROU LETON 8MM' ajouté ou mis à jour pour référence 'ecle-8'.
+2025-02-03 12:51:24,639 - INFO - Products and status stored successfully for this session.
+2025-02-03 12:51:24,653 - ERROR - Error generating PDF or image: No wkhtmltopdf executable found: "C:Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+If this file exists please check that this process can read it or you can pass path to it manually in method call, check README. Otherwise please install wkhtmltopdf - https://github.com/JazzCore/python-pdfkit/wiki/Installing-wkhtmltopdf
+Traceback (most recent call last):
+  File "c:\users\lenovo\appdata\local\programs\python\python310\lib\site-packages\pdfkit\configuration.py", line 35, in __init__
+    with open(self.wkhtmltopdf) as f:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\new\app.py", line 1212, in generate_quote_base64
+    config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH)
+  File "c:\users\lenovo\appdata\local\programs\python\python310\lib\site-packages\pdfkit\api.py", line 86, in configuration
+    return Configuration(**kwargs)
+  File "c:\users\lenovo\appdata\local\programs\python\python310\lib\site-packages\pdfkit\configuration.py", line 38, in __init__
+    raise IOError('No wkhtmltopdf executable found: "%s"\n'
+OSError: No wkhtmltopdf executable found: "C:Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+If this file exists please check that this process can read it or you can pass path to it manually in method call, check README. Otherwise please install wkhtmltopdf - https://github.com/JazzCore/python-pdfkit/wiki/Installing-wkhtmltopdf
+2025-02-03 12:51:24,657 - ERROR - Error saving data: Failed to generate PDF or image: No wkhtmltopdf executable found: "C:Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+If this file exists please check that this process can read it or you can pass path to it manually in method call, check README. Otherwise please install wkhtmltopdf - https://github.com/JazzCore/python-pdfkit/wiki/Installing-wkhtmltopdf
+Traceback (most recent call last):
+  File "c:\users\lenovo\appdata\local\programs\python\python310\lib\site-packages\pdfkit\configuration.py", line 35, in __init__
+    with open(self.wkhtmltopdf) as f:
+FileNotFoundError: [Errno 2] No such file or directory: 'C:Program Files\\wkhtmltopdf\\bin\\wkhtmltopdf.exe'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\new\app.py", line 1212, in generate_quote_base64
+    config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH)
+  File "c:\users\lenovo\appdata\local\programs\python\python310\lib\site-packages\pdfkit\api.py", line 86, in configuration
+    return Configuration(**kwargs)
+  File "c:\users\lenovo\appdata\local\programs\python\python310\lib\site-packages\pdfkit\configuration.py", line 38, in __init__
+    raise IOError('No wkhtmltopdf executable found: "%s"\n'
+OSError: No wkhtmltopdf executable found: "C:Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+If this file exists please check that this process can read it or you can pass path to it manually in method call, check README. Otherwise please install wkhtmltopdf - https://github.com/JazzCore/python-pdfkit/wiki/Installing-wkhtmltopdf
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\LENOVO\new\app.py", line 976, in chat
+    pdf_data, preview_image, pdf_path = generate_quote_base64(
+  File "C:\Users\LENOVO\new\app.py", line 1241, in generate_quote_base64
+    raise RuntimeError(f"Failed to generate PDF or image: {e}")
+RuntimeError: Failed to generate PDF or image: No wkhtmltopdf executable found: "C:Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+If this file exists please check that this process can read it or you can pass path to it manually in method call, check README. Otherwise please install wkhtmltopdf - https://github.com/JazzCore/python-pdfkit/wiki/Installing-wkhtmltopdf
+2025-02-03 12:51:24,665 - INFO - 127.0.0.1 - - [03/Feb/2025 12:51:24] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:53:48,421 - INFO - Status prediction model loaded successfully.
+2025-02-03 12:53:48,432 - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on http://127.0.0.1:5000
+2025-02-03 12:53:48,433 - INFO - [33mPress CTRL+C to quit[0m
+2025-02-03 12:53:50,935 - INFO - Session cleared: Restarting steps.
+2025-02-03 12:53:50,952 - INFO - 127.0.0.1 - - [03/Feb/2025 12:53:50] "GET / HTTP/1.1" 200 -
+2025-02-03 12:53:50,992 - INFO - 127.0.0.1 - - [03/Feb/2025 12:53:50] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:53:55,157 - INFO - 127.0.0.1 - - [03/Feb/2025 12:53:55] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:54:01,375 - INFO - Step 2: Parsing user input for mixed information.
+2025-02-03 12:54:01,376 - INFO - Raw user input: bonjour, je suis jacques moreau, pdg de smartsoft. l'entreprise se trouve à 5 rue des lilas, marseille. notre mail est support@smartsoft.com et notre numéro de tva est fr11122233344.
+2025-02-03 12:54:01,396 - INFO - Standardized user input: je suis jacques moreau, pdg de smartsoft. l'entreprise se trouve à 5 rue des lilas, marseille. notre mail est support@smartsoft.com et numéro de TVA: fr11122233344.
+2025-02-03 12:54:01,406 - INFO - Extracted data from user input: {'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:54:01,409 - INFO - Updated session data: {'products': [], 'is_partner': False, 'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:54:01,410 - INFO - Checking if company 'SmartSoft' exists in the database.
+2025-02-03 12:54:01,413 - INFO - Database result for company 'SmartSoft': ('5 rue des lilas, marseille.', 'fr11122233344', 'support@smartsoft.com')
+2025-02-03 12:54:01,413 - INFO - Company found in database. Updated session data with database values.
+2025-02-03 12:54:01,414 - INFO - Final session data: {'products': [], 'is_partner': False, 'nom_entreprise': 'SmartSoft', 'adresse_entreprise': '5 rue des lilas, marseille.', 'n_tva': 'fr11122233344', 'email': 'support@smartsoft.com', 'nom_user': 'jacques moreau'}
+2025-02-03 12:54:01,414 - INFO - Company and user name detected. Proceeding directly to Step 7.
+2025-02-03 12:54:01,418 - INFO - 127.0.0.1 - - [03/Feb/2025 12:54:01] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:54:11,113 - WARNING - Produit introuvable: Référence 'ecle-8ecle-8' non trouvée.
+2025-02-03 12:54:11,116 - INFO - 127.0.0.1 - - [03/Feb/2025 12:54:11] "POST /chat HTTP/1.1" 200 -
+2025-02-03 12:54:18,500 - INFO - Produit 'ECROU LETON 8MM' ajouté ou mis à jour pour référence 'ecle-8'.
+2025-02-03 12:54:18,530 - INFO - Products and status stored successfully for this session.
+2025-02-03 12:54:20,220 - INFO - PDF path: C:\Users\LENOVO\new\archives_devis\devis_SmartSoft_20250203125418.pdf
+2025-02-03 12:54:20,220 - INFO - PDF filename: devis_SmartSoft_20250203125418.pdf
+2025-02-03 12:54:20,224 - INFO - Recipient email: support@smartsoft.com
+2025-02-03 12:54:20,225 - INFO - PDF file read successfully: devis_SmartSoft_20250203125418.pdf
+2025-02-03 12:54:20,227 - INFO - PDF attached to the email: devis_SmartSoft_20250203125418.pdf
+2025-02-03 12:54:22,647 - INFO - Email with PDF attachment (devis_SmartSoft_20250203125418.pdf) sent to support@smartsoft.com.
+2025-02-03 12:54:22,658 - INFO - 127.0.0.1 - - [03/Feb/2025 12:54:22] "POST /chat HTTP/1.1" 200 -

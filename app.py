@@ -4,6 +4,8 @@ import json
 import psycopg2
 import re
 from jinja2 import Environment, FileSystemLoader
+import platform
+
 import pdfkit
 import joblib
 import logging
@@ -21,6 +23,7 @@ from mail_config import init_mail
 import base64
 from pdf2image import convert_from_path
 from PIL import ImageEnhance
+from thefuzz import process
 
 
 app = Flask(__name__)
@@ -31,12 +34,22 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_PERMANENT'] = False
 Session(app)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ARCHIVES_DIR = os.path.join(BASE_DIR, "archives_devis")
+os.makedirs(ARCHIVES_DIR, exist_ok=True)
+
+LOGS_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(LOGS_DIR, exist_ok=True)
 
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.StreamHandler()]
+    handlers=[
+        logging.FileHandler(os.path.join(LOGS_DIR, "app.log")),
+        logging.StreamHandler()
+    ]
 )
+
 try:
     conn = psycopg2.connect(
         dbname="chatbot_db",
@@ -80,9 +93,7 @@ def normalize_input(user_input):
     # Predefined lexicon mapping phrases to normalized commands
     lexicon = {
         r"(je veux|je souhaite|svp|veuillez|j'ai)": "", 
-        r"(le nom est|mon nom est|on est)": "set_name",  
         r"(créer|nouveau|initier)": "create",  
-        r"(adresse|l'adresse est)": "set_address",  
     }
     
     # Lowercase and trim input
@@ -95,8 +106,7 @@ def normalize_input(user_input):
     # Remove extra spaces
     user_input = re.sub(r"\s+", " ", user_input).strip()
     return user_input
-
-MODEL_PATH = r'C:\\Users\\LENOVO\\new\\models\\gradient_boosting_model2.pkl'
+MODEL_PATH = os.path.join(BASE_DIR, "models", "gradient_boosting_model2.pkl")
 loaded_model = joblib.load(MODEL_PATH)
 print(loaded_model.feature_names_in_)
 
@@ -128,7 +138,7 @@ def log_status_change(client_name, old_status, new_status, reason):
         logging.info(f"Status change logged for client '{client_name}': {old_status} -> {new_status}")
     except Exception as e:
         logging.error(f"Failed to log status change for client '{client_name}': {e}", exc_info=True)
-MODEL_PATH = r'C:\\Users\\LENOVO\\new\\models\\client_status_model_enhanced.pkl'
+MODEL_PATH = os.path.join(BASE_DIR, "models", "client_status_model_enhanced.pkl")
 try:
     status_model = joblib.load(MODEL_PATH)
     logging.info("Status prediction model loaded successfully.")
@@ -274,9 +284,8 @@ def add_product(quantity, reference, session, cursor, conn):
         session.modified = True
         pdf_data, preview_image, pdf_path = generate_quote_base64(
             session['data']['nom_entreprise'], session['data']['products'], 
-            archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+            archive_folder=ARCHIVES_DIR
         )
-        session['data']['pdf_path'] = pdf_path
 
         return jsonify({
             "response": f"Produit '{designation}' ajouté avec succès !",
@@ -311,7 +320,7 @@ def update_product(quantity, reference, session, cursor, conn):
 
                 pdf_data, preview_image, pdf_path = generate_quote_base64(
                     session['data']['nom_entreprise'], session['data']['products'], 
-                    archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+                    archive_folder=ARCHIVES_DIR
                 )
                 session['data']['pdf_path'] = pdf_path
 
@@ -352,7 +361,7 @@ def remove_product(reference, session, cursor, conn):
 
         pdf_data, preview_image, pdf_path = generate_quote_base64(
             session['data']['nom_entreprise'], session['data']['products'], 
-            archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+            archive_folder=ARCHIVES_DIR
         )
         session['data']['pdf_path'] = pdf_path
 
@@ -388,52 +397,71 @@ def predict_price():
         logging.error(f"Error in prediction: {e}")
         return jsonify({"error": "Failed to predict price."}), 500
 
+corrections = {
+    "nom_user": [
+        "je suis", "moi c'est", "mon nom est", "je m'appelle", "on m'appelle",
+        "le gérant", "la gérante", "directeur", "responsable commercial", "chef d'entreprise", "PDG", "entrepreneur"
+    ],
+    "nom_entreprise": [
+        "de la société", "de l'entreprise", "notre société", "notre entreprise", "groupe", "cabinet", "boutique"
+    ],
+    "adresse_entreprise": [
+        "notre adresse est", "situé à", "située à", "se trouve à", "implanté à", "notre siège social est à", "domicilié à"
+    ],
+    "n_tva": ["numéro de TVA", "TVA", "numéro fiscal"],
+    "email": ["notre email est", "adresse électronique", "email de contact"]
+}
 
+def correct_text(text):
+    """Corrects user input dynamically based on predefined keywords."""
+    words = text.split()
+    corrected_words = []
+
+    for word in words:
+        best_match, score = process.extractOne(word, sum(corrections.values(), []))
+        corrected_words.append(best_match if score > 85 else word)
+
+    return " ".join(corrected_words)
+    
 def extract_information(user_input):
     """
     Extracts company name, address, VAT number, email, and user name from unordered input.
+    Uses fuzzy matching for company names and improved regex for addresses.
     """
-    # Normalize input (remove extra spaces)
-    user_input = user_input.strip()
 
-    # Fix "cest" to "c'est" for better email detection
-    user_input = re.sub(r"\bcest\b", "c'est", user_input, flags=re.IGNORECASE)
+    # Normalize input
+    user_input = user_input.strip().lower()
+    
+    # Debugging print
+    print(f"Debugging Input Before Extraction: {user_input}")
 
-    print(f"Debugging Input Before Extraction: {user_input}")  # **Add this line to print processed input**
-
-    # Define refined regex patterns
+    # **Better Regex Patterns**
     patterns = {
-        # User Name (Capture the actual name, ignoring "de la société")
-        "nom_user": r"(?:je suis|moi c'est|mon nom est|je m'appelle|on m'appelle|on me connaît sous le nom de|le gérant|la gérante|le responsable|la responsable|directeur|directrice|responsable des ventes|responsable commercial|chef d'entreprise|PDG|propriétaire|dirigeant|chef de projet|manager|co-fondateur|fondateur|partenaire|consultant|associé|entrepreneur|freelance|auto-entrepreneur|gestionnaire|administrateur|secrétaire général|président|vice-président|vendeur|commerçant|artisan|formateur|représentant|développeur|designer|marketeur|chargé de mission|expert|coach|professeur|avocat|ingénieur|médecin|notaire|courtier|agent immobilier|recruteur|indépendant|travailleur indépendant)\s+([\w-]+(?:\s[\w-]+)?)",
+        "nom_user": r"(?:je suis|moi c'est|mon nom est|je m'appelle|on m'appelle|directeur|directrice|PDG|responsable|chef d'entreprise|co-fondateur|fondateur|manager|consultant)\s+([\w\s-]+)",
 
-        # Company Name (Ensure "de la société" is properly handled)
-        "nom_entreprise": r"(?:de la société|de la societe|de l'entreprise|nom de la société|nom de la societe|de la part de la societe|notre entreprise|notre société|la société s'appelle|entreprise|société|groupe|start-up|marque|cabinet|boutique|commerce|organisme|association|bureau|franchise)\s+([\w-]+)",
-
-        # Address (Ensure it captures after "situé à" or similar phrases)
-        "adresse_entreprise": r"(?:\b(situ[ée]?|basé[ée]?|localisé[ée]?|adresse|sise à|dans|notre adresse|l'adresse|se trouve à|installé à|implanté à|nous sommes à|nous sommes situés à|notre siège est à|notre siège social est à|se situe à|domicilié à|établi à)\b)\s+([\w\s,-]+?(?=\s*(notre\s|email|téléphone|$)))",
-
-        # VAT Number (Handles "numéro de TVA")
+        "nom_entreprise": r"(?:de la société|de la societe|de l'entreprise|chez|nom de la société|notre entreprise|notre société|la société s'appelle|l'entreprise|entreprise|société|groupe|start-up|marque|cabinet|boutique|commerce|organisme|association|bureau|franchise|pdg de|directeur de|fondatrice de|fondateur de|je bosse chez|nous sommes chez|chef de projet chez|responsable chez)\s+([\w&-]+(?:\s[\w&-]+)*)",
+        "adresse_entreprise": r"(?:\b(?:situ[ée]?|basé[ée]?|localisé[ée]?|adresse|sise à|dans|notre adresse est|l'adresse|se trouve à|installé à|implanté à|nous sommes à|nous sommes situés à|notre siège est à|notre siège social est à|se situe à|domicilié à|établi à|nous sommes basés|l'agence est implantée)\b)\s*(?:au|à|dans|sur|aux)?\s*([\w\s\d\-,.'éèêôûüïäöç]+?)(?=\s*(email|tva|numéro de tva|téléphone|notre|$))",
         "n_tva": r"\b(FR\d{11})\b",
 
-        # Email (Fixes extraction of "set_address e-mail")
         "email": r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)"
     }
 
+    extracted_data = { "nom_entreprise": None, "adresse_entreprise": None, "n_tva": None, "email": None, "nom_user": None }
 
-    extracted_data = {
-        "nom_entreprise": None,
-        "adresse_entreprise": None,
-        "n_tva": None,
-        "email": None,
-        "nom_user": None
-    }
-
+    # Apply regex extraction
     for key, pattern in patterns.items():
         match = re.search(pattern, user_input, re.IGNORECASE)
         if match:
             extracted_data[key] = match.group(1).strip()
-            print(f"Extracted {key}: {extracted_data[key]}")  # **Debugging each extracted field**
 
+    # **Use fuzzy matching to improve company name**
+    known_companies = ["Innovatech", "TechCorp", "WebSolutions", "SmartSoft", "DigitalCom", "NextGen"]
+    if extracted_data["nom_entreprise"]:
+        best_match, score = process.extractOne(extracted_data["nom_entreprise"], known_companies)
+        if score > 80:  # Only update if it's a high confidence match
+            extracted_data["nom_entreprise"] = best_match
+
+    print(f"Extracted Data: {extracted_data}")
     return extracted_data
 
 def standardize_user_input(user_input):
@@ -593,7 +621,7 @@ def chat():
                     # 🚀 **If both company and user name are available, skip to Step 7**
                     logging.info("Company and user name detected. Proceeding directly to Step 7.")
                     session['step'] = 7
-                    return jsonify({"response": get_variable_response("company_and_user_detected")})
+                    return jsonify({"response": get_variable_response("ask_products")})
 
             # 3. Check if required information is missing
             missing_fields = []
@@ -946,7 +974,8 @@ def chat():
 
                 # Generate the quote and save its path
                 pdf_data, preview_image, pdf_path = generate_quote_base64(
-                    session['data']['nom_entreprise'], items, archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+                    session['data']['nom_entreprise'], items, archive_folder=ARCHIVES_DIR
+
                 )
                 session['data']['pdf_path'] = pdf_path
                 recipient_email = session['data']['email']
@@ -1038,7 +1067,8 @@ def chat():
             try:
                 items = session['data']['products']
                 pdf_data, preview_image, pdf_path = generate_quote_base64(
-                    session['data']['nom_entreprise'], items, archive_folder="C:\\Users\\LENOVO\\new\\archives_devis"
+                    session['data']['nom_entreprise'], items, archive_folder=ARCHIVES_DIR
+
                 )
                 session['data']['pdf_path'] = pdf_path
 
@@ -1083,8 +1113,10 @@ def send_email(recipient, subject, pdf_path, client_name):
         logging.info(f"PDF filename: {pdf_filename}")
 
         # Load the email template
-        env = Environment(loader=FileSystemLoader("templates"))
+        TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+        env = Environment(loader=FileSystemLoader(TEMPLATES_DIR))
         template = env.get_template("email_template.html")
+        
         html_content = template.render(client_name=client_name, pdf_filename=pdf_filename)
 
         # Log recipient email
@@ -1142,7 +1174,7 @@ def get_quote_number():
     save_counter(data)
 
     return f'{data["counter"]:04d}'
-def generate_quote_base64(client_name, items, archive_folder="C:\\Users\\LENOVO\\new\\archives_devis", output_file=None):
+def generate_quote_base64(client_name, items, archive_folder=ARCHIVES_DIR, output_file=None):
     try:
         env = Environment(loader=FileSystemLoader("templates"))
         template = env.get_template("quote_template.html")
@@ -1169,10 +1201,15 @@ def generate_quote_base64(client_name, items, archive_folder="C:\\Users\\LENOVO\
         if not output_file:
             timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
             sanitized_client_name = re.sub(r"[^\w\-_\.]", "_", client_name)
-            output_file = os.path.join(archive_folder, f"devis_{sanitized_client_name}_{timestamp}.pdf")
+            output_file = os.path.join(ARCHIVES_DIR, f"devis_{sanitized_client_name}_{timestamp}.pdf")
 
         #  wkhtmltopdf configuration
-        config = pdfkit.configuration(wkhtmltopdf=r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe')
+        if platform.system() == "Windows":
+                WKHTMLTOPDF_PATH = r"C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe"
+        else:
+            WKHTMLTOPDF_PATH = "/usr/bin/wkhtmltopdf"
+
+        config = pdfkit.configuration(wkhtmltopdf=WKHTMLTOPDF_PATH)
         options = {
             'enable-local-file-access': '',
             'quiet': ''
@@ -1187,7 +1224,7 @@ def generate_quote_base64(client_name, items, archive_folder="C:\\Users\\LENOVO\
         image = ImageEnhance.Contrast(image).enhance(1.5)
         image = ImageEnhance.Sharpness(image).enhance(2.0)
 
-        preview_image_path = os.path.join(archive_folder, f"preview_{sanitized_client_name}_{timestamp}.jpg")
+        preview_image_path = os.path.join(ARCHIVES_DIR, f"preview_{sanitized_client_name}_{timestamp}.jpg")
         image.save(preview_image_path, "JPEG", quality=95, dpi=(300, 300))  # Save with high quality and DPI
 
         # Encode the preview image to Base64 for response
