@@ -403,22 +403,22 @@ def extract_information(user_input):
 
     # Define refined regex patterns
     patterns = {
-        # User Name (Capture only the actual name)
-        "nom_user": r"(?:je suis|moi c'est|mon nom est|je m'appelle|on m'appelle|on me connaît sous le nom de|le gérant|la gérante|le responsable|la responsable|directeur|directrice|responsable des ventes|responsable commercial|chef d'entreprise|PDG|propriétaire|dirigeant|chef de projet|manager|co-fondateur|fondateur|partenaire|consultant|associé|entrepreneur|freelance|auto-entrepreneur|gestionnaire|administrateur|secrétaire général|président|vice-président|vendeur|commerçant|artisan|formateur|représentant|développeur|designer|marketeur|chargé de mission|expert|coach|professeur|avocat|ingénieur|médecin|notaire|courtier|agent immobilier|recruteur|indépendant|auto-entrepreneur|travailleur indépendant|je me présente|je me prénomme)\s+([\w-]+\s[\w-]+)",
+        # User Name (Capture the actual name, ignoring "de la société")
+        "nom_user": r"(?:je suis|moi c'est|mon nom est|je m'appelle|on m'appelle|on me connaît sous le nom de|le gérant|la gérante|le responsable|la responsable|directeur|directrice|responsable des ventes|responsable commercial|chef d'entreprise|PDG|propriétaire|dirigeant|chef de projet|manager|co-fondateur|fondateur|partenaire|consultant|associé|entrepreneur|freelance|auto-entrepreneur|gestionnaire|administrateur|secrétaire général|président|vice-président|vendeur|commerçant|artisan|formateur|représentant|développeur|designer|marketeur|chargé de mission|expert|coach|professeur|avocat|ingénieur|médecin|notaire|courtier|agent immobilier|recruteur|indépendant|travailleur indépendant)\s+([\w-]+(?:\s[\w-]+)?)",
 
-        # **Company Name (Even more variations for precision)**
-        "nom_entreprise": r"(?:de la société|de la societe|de l'entreprise|nom de la société|nom de la societe|la société s'appelle|la societe s'appelle|entreprise|société|notre société|notre societe|ma société|ma societe|nous sommes la société|nous sommes la societe|la firme|la compagnie|groupe|groupe industriel|corporation|start-up|ma boîte|mon entreprise|notre entreprise|ma boîte|mon enseigne|mon commerce|notre commerce|ma structure|mon agence|notre agence|cabinet|établissement|centre|boutique|marque|filiale|holding|association|coopérative|bureau|organisme|franchise|atelier|usine|studio|restaurant|bar|hôtel|chaîne|enseigne|ma marque)\s+([\w-]+)",
+        # Company Name (Ensure "de la société" is properly handled)
+        "nom_entreprise": r"(?:de la société|de la societe|de l'entreprise|nom de la société|nom de la societe|de la part de la societe|notre entreprise|notre société|la société s'appelle|entreprise|société|groupe|start-up|marque|cabinet|boutique|commerce|organisme|association|bureau|franchise)\s+([\w-]+)",
 
-        # **Address (Covers even more ways people mention location)**
-        "adresse_entreprise": r"(?:\b(situ[ée]?|situ[ée]s?|situé a|situe a|basé[ée]?|basé[ée]s?|basée a|basee a|basé a|base a | on est basé a|c'est base a |on est basé à|localisé[ée]|localisé[ée]s|localisation|adresse|sise à|sise a|dans|adresse(?: est)?|notre adresse|l'adresse|se trouve à|installé à|implanté à|réside à|localisé à|nous sommes à|nous sommes situés à|nous avons un bureau à|Nos bureaux se trouvent à| notre bureaux se trouve à|nous sommes implantés à|nos locaux sont à|notre siège est à|notre siège social est à|se situe à|domicilié à|établi à|nous exerçons à|nos bureaux sont à|notre agence est à|notre établissement est à|nous opérons à|nous sommes enregistrés à|l’entreprise est située à|l’entreprise est implantée à|le siège administratif est à|notre point de vente est à|nos locaux commerciaux sont à|nous avons un point de vente à|nous avons plusieurs bureaux à|nos entrepôts sont situés à|le magasin est basé à|notre centre d’affaires est à|notre centre de production est à|nous fabriquons à|notre usine est implantée à|notre filiale est située à|nos locaux principaux sont à|nous avons des bureaux à|nos bureaux principaux sont à|le siège opérationnel est à|notre adresse commerciale est à)\b)\s+([\w\s,-]+(?:\d{1,5}[\s,-]*\w*)*)",
+        # Address (Ensure it captures after "situé à" or similar phrases)
+        "adresse_entreprise": r"(?:\b(situ[ée]?|basé[ée]?|localisé[ée]?|adresse|sise à|dans|notre adresse|l'adresse|se trouve à|installé à|implanté à|nous sommes à|nous sommes situés à|notre siège est à|notre siège social est à|se situe à|domicilié à|établi à)\b)\s+([\w\s,-]+?(?=\s*(notre\s|email|téléphone|$)))",
 
-        # **VAT Number (Keeping it for structured business information)**
+        # VAT Number (Handles "numéro de TVA")
         "n_tva": r"\b(FR\d{11})\b",
 
-        # **Email (Already strong, no changes needed)**
-        "email": r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)",
-
+        # Email (Fixes extraction of "set_address e-mail")
+        "email": r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)"
     }
+
 
     extracted_data = {
         "nom_entreprise": None,
@@ -561,6 +561,7 @@ def chat():
             # 2. Check if the company already exists in the database
             if session['data']['nom_entreprise']:
                 logging.info(f"Checking if company '{session['data']['nom_entreprise']}' exists in the database.")
+                
                 cursor.execute("""
                     SELECT 
                         i.adresse_entreprise, 
@@ -571,6 +572,7 @@ def chat():
                     ON i.nom_entreprise = ic.nom_client
                     WHERE i.nom_entreprise = %s
                 """, (session['data']['nom_entreprise'],))
+                
                 company_data = cursor.fetchone()
                 logging.info(f"Database result for company '{session['data']['nom_entreprise']}': {company_data}")
 
@@ -582,9 +584,16 @@ def chat():
                     logging.info("Company found in database. Updated session data with database values.")
                     logging.info(f"Final session data: {session['data']}")
 
-                    # Skip to step 6
-                    session['step'] = 6
-                    return jsonify({"response": get_variable_response("company_already_exists")})
+                    # 🚀 **Check if the user name is provided**
+                    if not session['data']['nom_user'] or session['data']['nom_user'] == "Non spécifié":
+                        logging.info("User name missing. Redirecting to Step 6 to collect user name.")
+                        session['step'] = 6
+                        return jsonify({"response": get_variable_response("ask_user_name")})
+                    
+                    # 🚀 **If both company and user name are available, skip to Step 7**
+                    logging.info("Company and user name detected. Proceeding directly to Step 7.")
+                    session['step'] = 7
+                    return jsonify({"response": get_variable_response("company_and_user_detected")})
 
             # 3. Check if required information is missing
             missing_fields = []
@@ -709,10 +718,12 @@ def chat():
             if re.search(r"(commander|acheter|demander|besoin de|recherche|chercher)", user_input_lower):
                 logging.debug(f"User input received: {user_input}")
 
-                # Extract multiple keywords
-                keyword_matches = re.findall(r"(?:commander|acheter|demander|besoin de|recherche|chercher)(?:\s+(?:un|une|des|du|et)?)\s+([\w-]+)", user_input_lower)
+                # Extract keywords, allowing optional "un, une, etc."
+                keyword_matches = re.findall(r"(?:commander|acheter|demander|besoin de|recherche|chercher)(?:\s+(?:un|une|des|du|le|la|les)?)?\s+([\w-]+)", user_input_lower)
+
+                # Extract extra items after "et" (e.g., "écrou et vis")
                 extra_keywords = re.findall(r"(?:et\s+)([\w-]+)", user_input_lower)
-                keyword_matches.extend(extra_keywords)  # Combine both lists
+                keyword_matches.extend(extra_keywords)
 
                 logging.debug(f"Keywords extracted: {keyword_matches}")
 
